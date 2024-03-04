@@ -1,0 +1,13 @@
+yacs
+torch==2.1.0
+torchaudio==2.1.0
+torchvision==0.16.0
+transformers==4.38.1
+opencv-python==4.9.0.80
+numpy
+tqdm
+wandb
+tokenizers==0.15.2
+nltk==3.8.1
+matplotlib==3.8.3
+apex==0.1
