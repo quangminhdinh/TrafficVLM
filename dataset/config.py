@@ -9,7 +9,7 @@ SELECTED_BBOX = "bbox_annotated"
 
 wts_train_main = {
   "name": "wts_train_main",
-  "features": os.path.join(FEATURE_PATH, "wts_dataset_main/train"),
+  "features": os.path.join(FEATURE_PATH, "wts_dataset_zip/train"),
   "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_zip/annotations/caption/train"),
   "bbox_pedestrian": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/annotations/{SELECTED_BBOX}/pedestrian/train"),
   "bbox_vehicle": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/annotations/{SELECTED_BBOX}/vehicle/train")
@@ -17,7 +17,7 @@ wts_train_main = {
 
 wts_val_main = {
   "name": "wts_val_main",
-  "features": os.path.join(FEATURE_PATH, "wts_dataset_main/val"),
+  "features": os.path.join(FEATURE_PATH, "wts_dataset_zip/val"),
   "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_zip/annotations/caption/val"),
   "bbox_pedestrian": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/annotations/{SELECTED_BBOX}/pedestrian/val"),
   "bbox_vehicle": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/annotations/{SELECTED_BBOX}/vehicle/val")
@@ -25,7 +25,7 @@ wts_val_main = {
 
 wts_train_external = {
   "name": "wts_train_external",
-  "features": os.path.join(FEATURE_PATH, "wts_dataset_external/train"),
+  "features": os.path.join(FEATURE_PATH, "external/BDD_PC_5K/train"),
   "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_zip/external/BDD_PC_5K/annotations/caption/train"),
   "bbox_pedestrian": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/external/BDD_PC_5K/annotations/bbox_annotated/train"),
   "bbox_vehicle": None
@@ -33,7 +33,7 @@ wts_train_external = {
 
 wts_val_external = {
   "name": "wts_val_external",
-  "features": os.path.join(FEATURE_PATH, "wts_dataset_external/val"),
+  "features": os.path.join(FEATURE_PATH, "external/BDD_PC_5K/val"),
   "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_zip/external/BDD_PC_5K/annotations/caption/val"),
   "bbox_pedestrian": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/external/BDD_PC_5K/annotations/bbox_annotated/val"),
   "bbox_vehicle": None

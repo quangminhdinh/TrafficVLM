@@ -5,22 +5,22 @@ from .base_dataset import BaseDataset
 
 class WTSTrainDataset(BaseDataset):
   
-  def __init__(self, cfg, tokenizer, feature_branches=["vehicle"]):
+  def __init__(self, cfg, tokenizer, feature_branches=["mix"]):
     super().__init__(cfg, cfg.TRAIN_DATASETS, tokenizer,
                      feature_branches, cfg.TRAIN_RANDOM_PAD_TIME)
     
 
 class WTSValDataset(BaseDataset):
   
-  def __init__(self, cfg, tokenizer, feature_branches=["vehicle"]):
+  def __init__(self, cfg, tokenizer, feature_branches=["mix"]):
     super().__init__(cfg, cfg.VAL_DATASETS, tokenizer,
                      feature_branches, cfg.TRAIN_RANDOM_PAD_TIME)
     
 
 def wts_base_collate_fn(batch):
   bs = len(batch)
-  vehicle = torch.stack([batch[i]["vehicle"] for i in range(bs)])
-  overhead = [batch[i]["overhead"] for i in range(bs)]
+  feat = torch.stack([batch[i]["feat"] for i in range(bs)])
+  # overhead = [batch[i]["overhead"] for i in range(bs)]
   
   output_tokens = [batch[i]["output_tokens"] for i in range(bs)]
   max_output_len = max(len(x) for x in output_tokens)
@@ -32,7 +32,6 @@ def wts_base_collate_fn(batch):
   output_tokens = torch.stack(output_tokens)
   
   return {
-    "vehicle": vehicle,
-    "overhead": overhead,
+    "vehicle": feat,
     "output_tokens": output_tokens
   }

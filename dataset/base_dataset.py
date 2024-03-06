@@ -6,7 +6,7 @@ import json
 
 from .config import get_dataset_paths
 from utils import (
-  get_all_top_dirs, 
+  get_all_top, 
   sample_files,
   simple_text_preprocess
 )
@@ -34,6 +34,8 @@ class BaseDataset(Dataset):
     self.sample_fps = cfg.FPS
     self.extract_fps = cfg.EXTRACT_FPS
     
+    self.overhead_ratio = cfg.OVERHEAD_RATIO
+    
     self.num_bins = cfg.NUM_BINS
     self.num_text_tokens = len(tokenizer) - self.num_bins
     
@@ -51,11 +53,11 @@ class BaseDataset(Dataset):
     for idx, ds_cfg in enumerate(self.dataset_path_cfgs):
       ds_cfg["ratio"] = dataset_ratios[idx]["ratio"]
       if ds_cfg["ratio"] > 0:
-        ds_cfg["all_scenarios"] = get_all_top_dirs(ds_cfg["features"])
+        ds_cfg["all_scenarios"] = get_all_top(ds_cfg["features"]).sort()
         assert self.cutoff_ds is None
         self.cutoff_ds = ds_cfg
       else:
-        ds_cfg["scenarios"] = get_all_top_dirs(ds_cfg["features"])
+        ds_cfg["scenarios"] = get_all_top(ds_cfg["features"]).sort()
         ds_cfg["len"] = len(ds_cfg["scenarios"])
         fixed_len += ds_cfg["len"]
         
@@ -87,48 +89,74 @@ class BaseDataset(Dataset):
   def _get_scenario(self, idx):
     ds_idx = self.ds_indices[idx]
     ds_cfg = self.dataset_path_cfgs[ds_idx]
-    scenario = ds_cfg["scenarios"][idx - self.ds_scenario_start_indice[ds_idx]]
+    scenario = ds_cfg["scenarios"][idx - self.ds_scenario_start_indice[ds_idx]].strip()
     return ds_cfg, scenario
+  
+  def _load_view_caption(self, ds_cfg, scenario, view, feat_dict):
+    caption_dir = os.path.join(ds_cfg["annotations"], scenario, view)
+    caption_path = os.path.join(caption_dir, sample_files(caption_dir)) # type: ignore
+    with open(caption_path, 'r') as caption_file:
+      cap = json.load(caption_file)
+    feat_dict[view] = cap
+  
+  def _load_caption(self, ds_cfg, scenario, is_external, feat_dict={}):
+    if is_external:
+      caption_path = os.path.join(ds_cfg["annotations"], f"{scenario}.json")
+      with open(caption_path, 'r') as caption_file:
+        cap = json.load(caption_file)
+      feat_dict["vehicle_view"] = cap
+      return
+    if "mix" in self.feature_branches:
+      view = "overhead_view" if np.random.uniform() < self.overhead_ratio else "vehicle_view"
+      self._load_view_caption(ds_cfg, scenario, view, feat_dict)
+      return
+    if "vehicle" in self.feature_branches:
+      self._load_view_caption(ds_cfg, scenario, "vehicle_view", feat_dict)
+    if "overhead" in self.feature_branches:
+      self._load_view_caption(ds_cfg, scenario, "overhead_view", feat_dict)
+      
+  def _load_clip_features(self, path, start, end, total_length):
+    feats = torch.from_numpy(np.load(path)).float()
+    assert len(feats) == total_length
+    feats = feats[start : end]
+    return self._resample_video_features(feats)
   
   def _load_features(self, idx):
     ds_cfg, scenario = self._get_scenario(idx)
     is_external = ds_cfg["bbox_vehicle"] is None
-    
-    caption_dir = os.path.join(ds_cfg["annotations"], "captions")
-    caption_path = os.path.join(caption_dir, sample_files(caption_dir)) # type: ignore
-    with open(caption_path, 'r') as caption_file:
-      feat_dict = json.load(caption_file)
-      
-    new_phases, duration, start_inc_num, end_inc_num = \
-      self._get_time(feat_dict["event_phase"])
-    feat_dict["event_phase"] = new_phases[::-1]
-    feat_dict["duration"] = duration
-    
-    total_frames = sum([len(phase["all_frames"]) for phase in new_phases])
-    
     if is_external:
-      vehicle_dir = os.path.join(ds_cfg["features"], scenario)
-    else:
-      vehicle_dir = os.path.join(ds_cfg["features"], scenario, "vehicle_view") # npy
-    vehicle_path = os.path.join(vehicle_dir, sample_files(vehicle_dir)) # type: ignore
-    vehicle_feats = torch.from_numpy(np.load(vehicle_path)).float()
-    assert len(vehicle_feats) == total_frames
-    vehicle_feats = vehicle_feats[start_inc_num:] if end_inc_num == 0 \
-      else vehicle_feats[start_inc_num : end_inc_num]
-    feat_dict["vehicle"] = self._resample_video_features(vehicle_feats)
-      
-    if "overhead" in self.feature_branches:
+      scenario = scenario.split(".")
+      assert len(scenario) == 2
+      scenario = scenario[0]
+    
+    feat_dict = {}
+    self._load_caption(ds_cfg, scenario, is_external, feat_dict)
+    
+    if "vehicle_view" in feat_dict:
+      view = feat_dict["vehicle_view"]
+      all_frames = sorted(view["all_frames"])
+      start_inc_num, end_inc_num = self._get_time(view, all_frames)
+    
       if is_external:
-        feat_dict["overhead"] = None
+        vehicle_path = os.path.join(ds_cfg["features"], f"{scenario}.npy")
       else:
-        overhead_dir = os.path.join(ds_cfg["features"], scenario, "overhead_view") # npy
-        overhead_path = os.path.join(overhead_dir, sample_files(overhead_dir)) # type: ignore
-        overhead_feats = torch.from_numpy(np.load(overhead_path)).float()
-        assert len(overhead_feats) == total_frames
-        overhead_feats = overhead_feats[start_inc_num:] if end_inc_num == 0 \
-          else overhead_feats[start_inc_num : end_inc_num]
-        feat_dict["overhead"] = self._resample_video_features(overhead_feats)
-        
+        vehicle_dir = os.path.join(ds_cfg["features"], scenario, "vehicle_view") # npy
+        vehicle_path = os.path.join(vehicle_dir, sample_files(vehicle_dir)) # type: ignore
+      feat_dict["vehicle"] = self._load_clip_features(
+        vehicle_path, start_inc_num, end_inc_num, len(all_frames)
+      )
+      
+    if "overhead_view" in feat_dict:
+      view = feat_dict["overhead_view"]
+      all_frames = sorted(view["all_frames"])
+      start_inc_num, end_inc_num = self._get_time(view, all_frames)
+    
+      overhead_dir = os.path.join(ds_cfg["features"], scenario, "overhead_view") # npy
+      overhead_path = os.path.join(overhead_dir, sample_files(overhead_dir)) # type: ignore
+      feat_dict["overhead"] = self._load_clip_features(
+        overhead_path, start_inc_num, end_inc_num, len(all_frames)
+      )
+
     return feat_dict
   
   def _redistribute_cutoff_samples(self):
@@ -136,39 +164,6 @@ class BaseDataset(Dataset):
       self.cutoff_ds["scenarios"] = np.random.choice(
         self.cutoff_ds["all_scenarios"], self.cutoff_ds["len"]
       )
-  
-  def _get_time(self, phases):
-    assert int(phases[-1]["labels"]) == 0
-    max_pad_frames = self.max_pad_time * self.sample_fps
-    
-    true_start = float(phases[-1]["start_time"])
-    true_start_frame = int(true_start * self.extract_fps)
-    all_frames_start = [int(frame) for frame in phases[-1]["all_frames"]]
-    start_inc_num = np.random.randint(max_pad_frames + 1) \
-      if self.random_pad_time else max_pad_frames
-    if all_frames_start[start_inc_num] > true_start_frame:
-      start_inc_num -= 1
-    assert all_frames_start[start_inc_num] <= true_start_frame
-    
-    true_end = float(phases[0]["end_time"])
-    true_end_frame = int(true_end * self.extract_fps)
-    all_frames_end = [int(frame) for frame in phases[0]["all_frames"]]
-    end_inc_num = np.random.randint(max_pad_frames + 1) \
-      if self.random_pad_time else max_pad_frames
-    if all_frames_end[-(end_inc_num + 1)] < true_end_frame:
-      end_inc_num -= 1
-    assert all_frames_end[-(end_inc_num + 1)] >= true_end_frame
-    
-    new_start_frame = all_frames_start[start_inc_num]
-    new_end_frame = all_frames_end[-(end_inc_num + 1)]
-    new_start = new_start_frame / self.extract_fps
-    new_end = new_end_frame / self.extract_fps
-    duration = new_end - new_start
-    for phase in phases:
-      phase["n_start_time"] = phases["start_time"] - new_start
-      phase["n_end_time"] = phases["end_time"] - new_start
-    
-    return phases, duration, start_inc_num, end_inc_num
   
   def _resample_video_features(self, feats):
     if len(feats) > self.max_feats:
@@ -193,13 +188,19 @@ class BaseDataset(Dataset):
       self._redistribute_cutoff_samples()
       
     feat_dict = self._load_features(idx)
-    vehicle = feat_dict["vehicle"]
-    overhead = feat_dict["overhead"] if "overhead" in self.feature_branches else None
-    duration = feat_dict["duration"]
-    phases = feat_dict["event_phase"]
+    if "vehicle" in feat_dict and "overhead" in feat_dict:
+      raise NotImplementedError()
+    elif "vehicle" in feat_dict:
+      feat = feat_dict["vehicle"]
+      view = feat_dict["vehicle_view"]
+    else:
+      feat = feat_dict["overhead"]
+      view = feat_dict["overhead_view"]
+    duration = view["duration"]
+    phases = view["event_phase"]
     
-    start = [phase["n_start_time"] for phase in phases]
-    end = [phase["n_end_time"] for phase in phases]
+    start = [phase["start_time"] for phase in phases]
+    end = [phase["end_time"] for phase in phases]
     text = [simple_text_preprocess(
       f"pedestrian: {phase['caption_pedestrian']} vehicle: {phase['caption_vehicle']}"
     ) for phase in phases]
@@ -221,10 +222,74 @@ class BaseDataset(Dataset):
                                torch.LongTensor([self.tokenizer.eos_token_id])], 0)
     
     return {
-      "vehicle": vehicle,
-      "overhead": overhead,
+      "feat": feat,
       "output_tokens": output_tokens
     }
   
   def __len__(self):
     return len(self.ds_indices)
+  
+  def _get_time(self, view, all_frames):
+    phases = view["event_phase"][::-1]
+    
+    for phase in phases:
+      phase["start_time"] = float(phase["start_time"])
+      phase["end_time"] = float(phase["end_time"])
+    
+    start_frame = int(phases[0]["start_time"] * self.extract_fps)
+    for idx, frame in enumerate(all_frames):
+      if frame > start_frame:
+        start_frame = all_frames[idx - 1] 
+        phases[0]["start_time"] = start_frame / self.extract_fps
+        start_inc_num = idx - 1
+        break
+      
+    end_frame = int(phases[-1]["end_time"] * self.extract_fps)
+    for idx in range(len(all_frames) - 1, -1, -1):
+      if all_frames[idx] < end_frame:
+        end_frame = all_frames[idx + 1] 
+        phases[-1]["end_time"] = end_frame / self.extract_fps
+        end_inc_num = idx + 1
+        break
+      
+    duration = phases[-1]["end_time"] - phases[0]["start_time"]
+    assert duration > 0
+    
+    view["event_phase"] = phases
+    view["duration"] = duration
+      
+    return start_inc_num, end_inc_num
+  
+  # LEGACY
+  # def _get_time(self, phases):
+  #   assert int(phases[-1]["labels"]) == 0
+  #   max_pad_frames = self.max_pad_time * self.sample_fps
+    
+  #   true_start = float(phases[-1]["start_time"])
+  #   true_start_frame = int(true_start * self.extract_fps)
+  #   all_frames_start = [int(frame) for frame in phases[-1]["all_frames"]]
+  #   start_inc_num = np.random.randint(max_pad_frames + 1) \
+  #     if self.random_pad_time else max_pad_frames
+  #   if all_frames_start[start_inc_num] > true_start_frame:
+  #     start_inc_num -= 1
+  #   assert all_frames_start[start_inc_num] <= true_start_frame
+    
+  #   true_end = float(phases[0]["end_time"])
+  #   true_end_frame = int(true_end * self.extract_fps)
+  #   all_frames_end = [int(frame) for frame in phases[0]["all_frames"]]
+  #   end_inc_num = np.random.randint(max_pad_frames + 1) \
+  #     if self.random_pad_time else max_pad_frames
+  #   if all_frames_end[-(end_inc_num + 1)] < true_end_frame:
+  #     end_inc_num -= 1
+  #   assert all_frames_end[-(end_inc_num + 1)] >= true_end_frame
+    
+  #   new_start_frame = all_frames_start[start_inc_num]
+  #   new_end_frame = all_frames_end[-(end_inc_num + 1)]
+  #   new_start = new_start_frame / self.extract_fps
+  #   new_end = new_end_frame / self.extract_fps
+  #   duration = new_end - new_start
+  #   for phase in phases:
+  #     phase["n_start_time"] = phases["start_time"] - new_start
+  #     phase["n_end_time"] = phases["end_time"] - new_start
+    
+  #   return phases, duration, start_inc_num, end_inc_num
