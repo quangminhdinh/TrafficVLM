@@ -67,8 +67,9 @@ class ExperimentLogger(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def log_text(self, prefix: tp.Union[str, tp.List[str]], key: str, text: str,
-                 step: tp.Optional[int] = None, **kwargs: tp.Any) -> None:
+    def log_text(self, prefix: tp.Union[str, tp.List[str]], key: tp.Union[str, tp.List[str]], 
+                 text: tp.Union[str, tp.List[str]], step: tp.Optional[int] = None, 
+                 **kwargs: tp.Any) -> None:
         """Records text.
         This method logs text as soon as it received them.
 

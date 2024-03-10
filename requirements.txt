@@ -17,3 +17,4 @@ nltk>=3.8
 rouge-score
 sentencepiece==0.2.0
 sentence-transformers==2.4.0
+BackTranslation==0.3.1

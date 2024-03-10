@@ -9,7 +9,8 @@ from utils import (
   get_all_top, 
   sample_files,
   simple_text_preprocess,
-  sample_every
+  sample_every,
+  Augmentor
 )
 
 
@@ -101,6 +102,8 @@ class BaseDataset(Dataset):
     
     self.ds_scenario_start_indice = self.ds_scenario_start_indice[:-1]
     print(f"Total samples: {len(self.ds_indices)}.")
+    
+    self.augmentor = Augmentor(cfg.AUGMENT)
     
   def _get_scenario(self, idx):
     ds_idx = self.ds_indices[idx]
@@ -267,7 +270,8 @@ class BaseDataset(Dataset):
     start = [phase["start_time"] - view["n_start"] for phase in phases]
     end = [phase["end_time"] - view["n_start"] for phase in phases]
     text = [simple_text_preprocess(
-      f"pedestrian: {phase['caption_pedestrian']} vehicle: {phase['caption_vehicle']}"
+      f"pedestrian: {self.augmentor.apply_nlp_long_sentence(phase['caption_pedestrian'])} "
+      f"vehicle: {self.augmentor.apply_nlp_long_sentence(phase['caption_vehicle'])}"
     ) for phase in phases]
     time_output_tokens = [torch.LongTensor([self.time_tokenize(st, duration, self.num_bins),
                                             self.time_tokenize(ed, duration, self.num_bins)])

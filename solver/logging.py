@@ -293,9 +293,13 @@ class ResultLogger:
         for _, logger in self._experiment_loggers.items():
             logger.log_image(stage, key, image, step, **kwargs)
 
-    def log_text(self, stage: str, key: str, text: str, step: tp.Optional[int] = None, **kwargs) -> None:
+    def log_text(self, stage: str, key: tp.Union[str, tp.List[str]], text: tp.Union[str, tp.List[str]], step: tp.Optional[int] = None, **kwargs) -> None:
         """Log text to all active experiment loggers.
         See `flashy.loggers.base.ExperimentLogger` for details.
         """
-        for _, logger in self._experiment_loggers.items():
-            logger.log_text(stage, key, text, step, **kwargs)
+        for lk, logger in self._experiment_loggers.items():
+            if lk == "wandb":
+                logger.log_text(stage, key, text, step, **kwargs)
+            else:
+                for idx in range(len(key)):
+                    logger.log_text(stage, key[idx], text[idx], step, **kwargs)

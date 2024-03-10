@@ -10,4 +10,7 @@ from .helpers import (
   get_all_top,
   fix_seed
 )
-from .preprocess import simple_text_preprocess
+from .preprocess import (
+  simple_text_preprocess,
+  Augmentor
+)

@@ -131,7 +131,8 @@ class BaseSolver:
         """See `flashy.logging.ResultLogger.log_image` for details"""
         self.result_logger.log_image(stage_name, key, image, self.epoch, **kwargs)
 
-    def log_text(self, stage_name: str, key: str, text: str, **kwargs: tp.Any):
+    def log_text(self, stage_name: str, key: tp.Union[str, tp.List[str]], 
+                 text: tp.Union[str, tp.List[str]], **kwargs: tp.Any):
         """See `flashy.logging.ResultLogger.log_text` for details"""
         self.result_logger.log_text(stage_name, key, text, self.epoch, **kwargs)
 

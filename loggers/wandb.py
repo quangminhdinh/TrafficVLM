@@ -150,8 +150,9 @@ class WandbLogger(ExperimentLogger):
         metrics = _add_prefix(metrics, prefix, self.group_separator)
         self.log_metrics(prefix, metrics, step)
 
-    def log_text(self, prefix: tp.Union[str, tp.List[str]], key: str, text: str,
-                 step: tp.Optional[int] = None, **kwargs: tp.Any) -> None:
+    def log_text(self, prefix: tp.Union[str, tp.List[str]], key: tp.Union[str, tp.List[str]], 
+                 text: tp.Union[str, tp.List[str]], step: tp.Optional[int] = None, 
+                 **kwargs: tp.Any) -> None:
         """Records text.
         This method logs text as soon as it received them.
 
@@ -164,9 +165,14 @@ class WandbLogger(ExperimentLogger):
         if self.is_disabled() or not self.with_media_logging:
             return
 
-        metrics = {
-            key: wandb.Table(columns=[key], data=[text], **kwargs)
-        }
+        if isinstance(key, str):
+            metrics = {
+                key: wandb.Table(columns=[key], data=[[text]], **kwargs)
+            }
+        else:
+            metrics = {
+                key[0].split("_")[0]: wandb.Table(columns=[*key], data=[text], **kwargs)
+            }
         metrics = _add_prefix(metrics, prefix, self.group_separator)
         self.log_metrics(prefix, metrics, step)
 

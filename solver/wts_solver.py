@@ -51,8 +51,8 @@ class WTSSolver(BaseSolver):
         if cfg.LOG_TO_WANDB:
             self.init_wandb(
                 log_folder=local_dir,
-                project=experiment_name,
-                signature=signature,
+                project="AIC Track 2",
+                signature=f"{experiment_name}_{signature}",
             )
         self.hparams = hparams
         self.max_epoch = self.train_cfg.MAX_EPOCH
@@ -202,13 +202,14 @@ class WTSSolver(BaseSolver):
                 if idx == 0:
                     self.log_text(
                         self.current_stage, 
-                        f"{loader.dataset.curr_ds_name} generated",
-                        output_text[0],
+                        [f"{loader.dataset.curr_ds_name}_generated",
+                         f"{loader.dataset.curr_ds_name}_groundtruth"],
+                        [output_text[0], raw_texts[0]],
                     )
-                    self.log_text(
-                        self.current_stage, 
-                        f"{loader.dataset.curr_ds_name} groundtruth",
-                        raw_texts[0],
-                    )
+                    # self.log_text(
+                    #     self.current_stage, 
+                    #     f"{loader.dataset.curr_ds_name}_groundtruth",
+                    #     raw_texts[0],
+                    # )
 
         return all_metrics
