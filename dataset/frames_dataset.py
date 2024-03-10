@@ -8,8 +8,7 @@ from .config import get_dataset_paths
 from utils import (
   get_all_top, 
   sample_files,
-  simple_text_preprocess,
-  sample_every
+  simple_text_preprocess
 )
 
 
@@ -31,8 +30,6 @@ class BaseDataset(Dataset):
     self.max_output_tokens = cfg.MAX_OUTPUT_TOKENS
     self.max_pad_time = cfg.MAX_PAD_TIME
     self.random_pad_time = random_pad_time
-    if self.random_pad_time:
-      print(f"0 to {self.max_pad_time}s will be added to the true feature segment.")
     self.tokenizer = tokenizer
     
     self.return_raw_text = return_raw_text
@@ -108,6 +105,11 @@ class BaseDataset(Dataset):
     scenario = ds_cfg["scenarios"][idx - self.ds_scenario_start_indice[ds_idx]].strip()
     return ds_cfg, scenario
   
+  # def _perform_external_integrity_check(self, ds_cfg):
+  #   eligible = []
+  #   broken = []
+  #   for scenario in ds_cfg["scenarios"]
+  
   def _perform_integrity_check(self, ds_cfg):
     if ds_cfg["bbox_vehicle"] is None:
       ds_cfg["broken"] = []
@@ -144,15 +146,16 @@ class BaseDataset(Dataset):
       cap = json.load(caption_file)
     feat_dict[view] = cap
   
-  def _load_caption(self, ds_cfg, usable, scenario, is_external, feat_dict={}):
+  def _load_caption(self, ds_cfg, scenario, is_external, feat_dict={}):
     if is_external:
       caption_path = os.path.join(ds_cfg["captions"], f"{scenario}_caption.json")
       with open(caption_path, 'r') as caption_file:
         cap = json.load(caption_file)
       feat_dict["vehicle_view"] = cap
       return
-    if len(usable) == 1 and (usable[0] in self.feature_branches or "mix" in self.feature_branches):
-      view = f"{usable[0]}_view"
+    if len(ds_cfg["usable"]) == 1 and \
+      (ds_cfg["usable"][0] in self.feature_branches or "mix" in self.feature_branches):
+      view = f"{ds_cfg['usable'][0]}_view"
       self._load_view_caption(ds_cfg, scenario, view, feat_dict)
       return
     if "mix" in self.feature_branches:
@@ -164,8 +167,11 @@ class BaseDataset(Dataset):
     if "overhead" in self.feature_branches:
       self._load_view_caption(ds_cfg, scenario, "overhead_view", feat_dict)
       
-  def _load_clip_features(self, path):
-    return torch.from_numpy(np.load(path)).float()
+  def _load_clip_features(self, path, start, end, total_length):
+    feats = torch.from_numpy(np.load(path)).float()
+    assert len(feats) == total_length
+    feats = feats[start : end]
+    return self._resample_video_features(feats)
   
   def _load_features(self, idx):
     ds_cfg, scenario = self._get_scenario(idx)
@@ -176,38 +182,32 @@ class BaseDataset(Dataset):
       scenario = scenario[0]
     
     feat_dict = {}
-    self._load_caption(
-      ds_cfg, 
-      ds_cfg["usable"][idx] if "usable" in ds_cfg else None, 
-      scenario, 
-      is_external, 
-      feat_dict
-    )
+    self._load_caption(ds_cfg, scenario, is_external, feat_dict)
     
     if "vehicle_view" in feat_dict:
       view = feat_dict["vehicle_view"]
+      all_frames = sorted(view["all_frames"])
+      start_inc_num, end_inc_num = self._get_time(view, all_frames)
+    
       if is_external:
         vehicle_path = os.path.join(ds_cfg["features"], f"{scenario}.npy")
       else:
         vehicle_dir = os.path.join(ds_cfg["features"], scenario, "vehicle_view") # npy
         vehicle_path = os.path.join(vehicle_dir, sample_files(vehicle_dir)) # type: ignore
-      
-      raw_feats = self._load_clip_features(vehicle_path)
-      selected_frames = self._get_frames(view, len(raw_feats))
-      feats = torch.index_select(raw_feats, 0, selected_frames)
-      assert len(feats) == len(selected_frames)
-      feat_dict["vehicle"] = self._resample_video_features(feats)
+      feat_dict["vehicle"] = self._load_clip_features(
+        vehicle_path, start_inc_num, end_inc_num, len(all_frames)
+      )
       
     if "overhead_view" in feat_dict:
       view = feat_dict["overhead_view"]
+      all_frames = sorted(view["all_frames"])
+      start_inc_num, end_inc_num = self._get_time(view, all_frames)
+    
       overhead_dir = os.path.join(ds_cfg["features"], scenario, "overhead_view") # npy
       overhead_path = os.path.join(overhead_dir, sample_files(overhead_dir)) # type: ignore
-      
-      raw_feats = self._load_clip_features(overhead_path)
-      selected_frames = self._get_frames(view, len(raw_feats))
-      feats = torch.index_select(raw_feats, 0, selected_frames)
-      assert len(feats) == len(selected_frames)
-      feat_dict["overhead"] = self._resample_video_features(feats)
+      feat_dict["overhead"] = self._load_clip_features(
+        overhead_path, start_inc_num, end_inc_num, len(all_frames)
+      )
 
     return feat_dict
   
@@ -251,8 +251,8 @@ class BaseDataset(Dataset):
     duration = view["duration"]
     phases = view["event_phase"]
     
-    start = [phase["start_time"] - view["n_start"] for phase in phases]
-    end = [phase["end_time"] - view["n_start"] for phase in phases]
+    start = [phase["start_time"] for phase in phases]
+    end = [phase["end_time"] for phase in phases]
     text = [simple_text_preprocess(
       f"pedestrian: {phase['caption_pedestrian']} vehicle: {phase['caption_vehicle']}"
     ) for phase in phases]
@@ -292,72 +292,70 @@ class BaseDataset(Dataset):
   def __len__(self):
     return len(self.ds_indices)
   
-  def _get_frames(self, view, total_samples):
-    total_samples -= 1
+  def _get_time(self, view, all_frames):
     phases = view["event_phase"]
     
     for phase in phases:
       phase["start_time"] = float(phase["start_time"])
       phase["end_time"] = float(phase["end_time"])
     
-    phases = self._sort_phases(phases)
+    if phases[-1]["end_time"] < phases[0]["start_time"]:
+      phases = phases[::-1]
     
-    max_pad_frames = self.max_pad_time * self.extract_fps
-    
-    true_start = phases[0]["start_time"]
-    true_start_frame = int(true_start * self.extract_fps)
-    true_end = phases[-1]["end_time"]
-    for phase in phases:
-      if phase["end_time"] > true_end:
-        true_end = phase["end_time"]
-    true_end_frame = int(true_end * self.extract_fps)
-    
-    assert true_end_frame < total_samples or \
-      true_end_frame - total_samples < self.extract_fps * 5
-    true_end_frame = min(true_end_frame, total_samples)
-    true_end = true_end_frame / self.extract_fps
-    
-    n_start_frame = np.random.randint(
-      max(true_start_frame - max_pad_frames, 0),
-      true_start_frame + 1,
-    ) if self.random_pad_time else true_start_frame
-    n_start = n_start_frame / self.extract_fps
-    n_end_frame = np.random.randint(
-      true_end_frame,
-      min(true_end_frame + max_pad_frames, total_samples) + 1,
-    ) if self.random_pad_time else true_end_frame
-    n_end = n_end_frame / self.extract_fps
-    
-    assert phases[0]["start_time"] >= n_start and \
-      (true_end <= n_end or true_end - n_end < 1)
-    n_end = max(n_end, true_end)
-    n_end_frame = int(n_end * self.extract_fps)
+    start_frame = int(phases[0]["start_time"] * self.extract_fps)
+    for idx, frame in enumerate(all_frames):
+      if frame > start_frame:
+        start_frame = all_frames[idx - 1] 
+        phases[0]["start_time"] = start_frame / self.extract_fps
+        start_inc_num = idx - 1
+        break
       
-    sampled_frames = sample_every(
-      n_end_frame - n_start_frame,
-      self.extract_fps // self.sample_fps,
-      n_start_frame
-    )
-    assert sampled_frames[-1] <= n_end_frame
+    end_frame = int(phases[-1]["end_time"] * self.extract_fps)
+    for idx in range(len(all_frames) - 1, -1, -1):
+      if all_frames[idx] < end_frame:
+        end_frame = all_frames[idx + 1] 
+        phases[-1]["end_time"] = end_frame / self.extract_fps
+        end_inc_num = idx + 1
+        break
+      
+    duration = phases[-1]["end_time"] - phases[0]["start_time"]
+    assert duration > 0
     
     view["event_phase"] = phases
-    view["n_start"] = n_start
-    view["n_end"] = n_end
-    view["duration"] = n_end - n_start
-    
-    for phase in phases:
-      if phase["end_time"] > n_end:
-        phase["end_time"] = n_end
-    
-    return torch.tensor(sampled_frames)
+    view["duration"] = duration
+      
+    return start_inc_num, end_inc_num
   
-  def _sort_phases(self, phases):
-    sorted_phases = sorted(phases, key=lambda p: p["start_time"])
-    # for idx in range(len(phases) - 1):
-      # if sorted_phases[idx]["end_time"] > sorted_phases[idx + 1]["end_time"]:
-      #   print([{"st": p["start_time"], "ed": p["end_time"]} for p in sorted_phases])
-      # assert sorted_phases[idx]["end_time"] <= sorted_phases[idx + 1]["end_time"]
-    return sorted_phases
-  
-
-# print([{"st": p["start_time"], "ed": p["end_time"]} for p in sorted_phases])
+  # LEGACY
+  # def _get_time(self, phases):
+  #   assert int(phases[-1]["labels"]) == 0
+  #   max_pad_frames = self.max_pad_time * self.sample_fps
+    
+  #   true_start = float(phases[-1]["start_time"])
+  #   true_start_frame = int(true_start * self.extract_fps)
+  #   all_frames_start = [int(frame) for frame in phases[-1]["all_frames"]]
+  #   start_inc_num = np.random.randint(max_pad_frames + 1) \
+  #     if self.random_pad_time else max_pad_frames
+  #   if all_frames_start[start_inc_num] > true_start_frame:
+  #     start_inc_num -= 1
+  #   assert all_frames_start[start_inc_num] <= true_start_frame
+    
+  #   true_end = float(phases[0]["end_time"])
+  #   true_end_frame = int(true_end * self.extract_fps)
+  #   all_frames_end = [int(frame) for frame in phases[0]["all_frames"]]
+  #   end_inc_num = np.random.randint(max_pad_frames + 1) \
+  #     if self.random_pad_time else max_pad_frames
+  #   if all_frames_end[-(end_inc_num + 1)] < true_end_frame:
+  #     end_inc_num -= 1
+  #   assert all_frames_end[-(end_inc_num + 1)] >= true_end_frame
+    
+  #   new_start_frame = all_frames_start[start_inc_num]
+  #   new_end_frame = all_frames_end[-(end_inc_num + 1)]
+  #   new_start = new_start_frame / self.extract_fps
+  #   new_end = new_end_frame / self.extract_fps
+  #   duration = new_end - new_start
+  #   for phase in phases:
+  #     phase["n_start_time"] = phases["start_time"] - new_start
+  #     phase["n_end_time"] = phases["end_time"] - new_start
+    
+  #   return phases, duration, start_inc_num, end_inc_num

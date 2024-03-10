@@ -11,6 +11,19 @@ def sample_bins(length, bins=1):
   return ids
 
 
+def sample_every(length, interval=1, start=0):
+  ids = []
+  rel_start = 0
+  while rel_start * interval <= length:
+    pts_start = rel_start * interval
+    idx = start + pts_start + np.random.randint(
+      min(interval, length - pts_start + 1)
+    )
+    ids.append(idx)
+    rel_start += 1
+  return ids
+
+
 def sample_files(parent_path, num_samples=1, ret_ids=False):
   all_samples = os.listdir(parent_path)
   total_samples = len(all_samples)

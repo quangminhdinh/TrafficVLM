@@ -58,7 +58,7 @@ def setup_logging(
     sh.setFormatter(formatter)
     root_logger.addHandler(sh)
     
-    logging.getLogger("absl").disabled = True
+    # logging.getLogger("absl").disabled = True
 
     if with_file_log:
         # We need to get the rank in a reliable way, even if distributed is not yet initialized.

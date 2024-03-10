@@ -2,6 +2,8 @@ import torch
 import typing as tp
 import math
 import sys
+from torchinfo import summary
+from tqdm import tqdm
 
 from .base_solver import BaseSolver
 from .optimizer import adjust_learning_rate
@@ -39,6 +41,8 @@ class WTSSolver(BaseSolver):
           if "optimizer" in checkpoint:
               self.optim.load_state_dict(checkpoint["optimizer"])
           print("\nPretrained Vid2Seq checkpoint has beed loaded!")
+          
+        summary(self.model)
 
         self.register_stateful('model', 'optim')
         
@@ -115,7 +119,7 @@ class WTSSolver(BaseSolver):
         self.model.train()
         num_training_steps = int(num_samples * self.max_epoch)
 
-        for idx, batch in enumerate(lp):
+        for idx, batch in tqdm(enumerate(lp), leave=False, total=num_samples):
             feat = batch["feat"].to(self.device)
             output_tokens = batch["output_tokens"].to(self.device)
             
@@ -160,7 +164,7 @@ class WTSSolver(BaseSolver):
             average = averager()
             self.model.eval()
 
-            for idx, batch in enumerate(lp):
+            for idx, batch in tqdm(enumerate(lp), leave=False, total=num_samples):
                 feat = batch["feat"].to(self.device)
                 label_tokens = batch["output_tokens"].to(self.device)
                 raw_texts = batch["output_text"].to("cpu")

@@ -2,6 +2,7 @@ yacs
 torch==2.1.0
 torchaudio==2.1.0
 torchvision==0.16.0
+torchinfo==1.8.0
 transformers==4.38.1
 opencv-python==4.9.0.80
 numpy

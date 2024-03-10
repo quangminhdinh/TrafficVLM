@@ -1,4 +1,8 @@
-from .sample import sample_bins, sample_files
+from .sample import (
+  sample_bins, 
+  sample_files,
+  sample_every
+)
 from .helpers import (
   load_all_feats_from_disk,
   get_all_top_dirs,
