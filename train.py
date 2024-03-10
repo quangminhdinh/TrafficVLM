@@ -71,6 +71,7 @@ def main(args, cfg):
     cfg.SOLVER,
     args.experiment,
     signature=signature,
+    batch_size=cfg.SOLVER.TRAIN.BATCH_SIZE,
     local_dir=experiment_dir,
     model=model,
     train_loader=train_loader,

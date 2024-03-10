@@ -17,6 +17,7 @@ class WTSSolver(BaseSolver):
     def __init__(self, cfg,
                  experiment_name,
                  signature,
+                 batch_size,
                  local_dir,
                  model, 
                  train_loader,
@@ -30,6 +31,7 @@ class WTSSolver(BaseSolver):
                 
         self.device = device
         self.model = model
+        self.batch_size = batch_size
         
         self.train_loader = train_loader
         self.val_loader = val_loader
@@ -58,7 +60,7 @@ class WTSSolver(BaseSolver):
         self.checkpoint_metrics = self.train_cfg.CHECKPOINT_METRICS
         
         self.val_interval = self.val_cfg.VAL_INTERVAL
-        assert self.val_interval % self.save_interval == 0
+        assert self.save_interval % self.val_interval == 0
         
         self.val_metrics_list = list(probe_metrics().keys())
         self.val_metrics_list.append('loss')
@@ -68,7 +70,8 @@ class WTSSolver(BaseSolver):
         if len(self.checkpoint_metrics) == 0:
             return
         prev_metrics = self.history[-1]
-        assert "valid" in prev_metrics
+        if "valid" not in prev_metrics:
+            return
         
         valid_metrics = prev_metrics["valid"]
         metrics_repr = [
@@ -111,15 +114,16 @@ class WTSSolver(BaseSolver):
         self.logger.info('-' * 80)
         self.logger.info(f'Starting {self.current_stage} stage...')
         loader = self.train_loader
-        num_samples = len(loader.dataset)
+        num_samples = len(loader)
         lp = self.log_progress(
-            self.current_stage, loader, total=num_samples, updates=self.log_updates
+            self.current_stage, loader, total=num_samples, updates=self.log_updates, use_tqdm = True
         )
         average = averager()
         self.model.train()
         num_training_steps = int(num_samples * self.max_epoch)
 
-        for idx, batch in tqdm(enumerate(lp), leave=False, total=num_samples):
+        for idx, batch in tqdm(enumerate(lp), leave=False, total=num_samples, 
+                               desc=f"Epoch {self.epoch}/{self.max_epoch}"):
             feat = batch["feat"].to(self.device)
             output_tokens = batch["output_tokens"].to(self.device)
             
@@ -157,41 +161,33 @@ class WTSSolver(BaseSolver):
         all_metrics = {}
         
         while loader.dataset.next_dataset():
-            num_samples = len(loader.dataset)
+            num_samples = len(loader)
             lp = self.log_progress(
-                self.current_stage, loader, total=num_samples, updates=self.log_updates
+                self.current_stage, loader, total=num_samples, updates=self.log_updates, use_tqdm = True
             )
             average = averager()
             self.model.eval()
 
-            for idx, batch in tqdm(enumerate(lp), leave=False, total=num_samples):
+            for idx, batch in tqdm(enumerate(lp), leave=False, total=num_samples, 
+                                   desc=f"Epoch {self.epoch}/{self.max_epoch}"):
                 feat = batch["feat"].to(self.device)
                 label_tokens = batch["output_tokens"].to(self.device)
-                raw_texts = batch["output_text"].to("cpu")
+                raw_texts = batch["output_text"]
                 
-                output = self.model.generate(
+                output_text = self.model.generate(
                     feats=feat,
                     use_nucleus_sampling=self.val_cfg.NUM_BEAMS == 0,
                     num_beams=self.val_cfg.NUM_BEAMS,
                     max_length=loader.dataset.max_output_tokens,
                     min_length=1,
-                    top_p=self.val_cfg.TOP_P,
+                    top_p=self.val_cfg.TOP_P if self.val_cfg.NUM_BEAMS == 0 else 1.0,
                     repetition_penalty=self.val_cfg.REPETITION_PENALTY,
                     length_penalty=self.val_cfg.LENGTH_PENALTY,
                     num_captions=1,
                     temperature=self.val_cfg.TEMPERATURE,
-                    return_dict_in_generate=True,
                 )
+                loss = self.model(feat, label_tokens)
                 
-                assert len(output.sequences) == len(label_tokens)
-                targets = label_tokens.masked_fill(
-                    label_tokens == loader.dataset.tokenizer.pad_token_id, -100
-                )
-                loss = self.model.calculate_loss_from_logits(output.logits, targets)
-                
-                output_text = loader.dataset.tokenizer.batch_decode(
-                    output.sequences, skip_special_tokens=True
-                )
                 ret_metrics = batch_evaluate(output_text, raw_texts)
                 ret_metrics = {
                     f"{loader.dataset.curr_ds_name}/{k}": v for k, v in ret_metrics.items()

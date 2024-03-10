@@ -14,6 +14,9 @@ from typing import List, Dict
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+EPS = 1e-10
+
+
 def calculate_tIoU(interval_pred, interval_gt):
     """Calculate the temporal Intersection over Union (tIoU) between two intervals."""
     start_pred, end_pred = interval_pred
@@ -120,7 +123,7 @@ def compute_mean_metrics(metrics_overall, num_segments_overall):
     """Compute mean metrics from overall metrics and number of segments."""
     metrics_mean = metrics_overall
     for metric_name in metrics_overall.keys():
-        metrics_mean[metric_name] /= num_segments_overall
+        metrics_mean[metric_name] /= (num_segments_overall + EPS)
 
     return metrics_mean
 
@@ -141,10 +144,33 @@ def batch_evaluate(pred_all_sentences, gt_all_sentences, tiou_thresholds=[0.0, 0
         tiou_thresholds = [tiou_thresholds]
 
     metrics_all_category_means = {}
+    raw_metrics = [
+        compute_metrics_single(
+            pred, gt, 1, 0
+        ) for pred, gt in zip(pred_all_sentences, gt_all_sentences)
+    ]
+    
+    raw_metrics_dict = {}
+    for k in raw_metrics[0].keys():
+        raw_metrics_dict[f"RAW {k.upper()}"] = [met[k] for met in raw_metrics]
+    
+    raw_total = 0
+    for k, v in raw_metrics_dict.items():
+        met = sum(v) / len(v)
+        metrics_all_category_means[k] = met
+        
+        if k != "raw cider".upper():
+            raw_total += met * 10
+        else:
+            raw_total += met * 100
+            
+    metrics_all_category_means["RAW TOTAL"] = raw_total / 4
     
     for tiou_threshold in tiou_thresholds:
         tiou_repr = f"tIoU {tiou_threshold}"
         metrics_pedestrian_overall, metrics_vehicle_overall, num_segments_overall = compute_metrics_overall(pred_all, gt_all, tiou_threshold)
+        if num_segments_overall == 0:
+            return metrics_all_category_means
         metrics_pedestrian_mean = compute_mean_metrics(metrics_pedestrian_overall, num_segments_overall)
         metrics_vehicle_mean = compute_mean_metrics(metrics_vehicle_overall, num_segments_overall)
 

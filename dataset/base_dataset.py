@@ -155,6 +155,8 @@ class BaseDataset(Dataset):
       view = f"{usable[0]}_view"
       self._load_view_caption(ds_cfg, scenario, view, feat_dict)
       return
+    if len(usable) == 1:
+      raise RuntimeError("Incorrect behaviour!")
     if "mix" in self.feature_branches:
       view = "overhead_view" if np.random.uniform() < self.overhead_ratio else "vehicle_view"
       self._load_view_caption(ds_cfg, scenario, view, feat_dict)
@@ -232,8 +234,19 @@ class BaseDataset(Dataset):
   
   def time_tokenize(self, x, duration, num_bins):
     time_token = int(float((num_bins - 1) * x) / float(duration))
+    if time_token > self.num_bins:
+      assert time_token + 1 <= self.num_bins
+      return self.num_bins + self.num_text_tokens
     assert time_token <= self.num_bins
     return time_token + self.num_text_tokens
+  
+  def _get_time_token(self, x, duration, num_bins):
+    time_token = int(float((num_bins - 1) * x) / float(duration))
+    # if time_token > self.num_bins:
+    #   assert time_token + 1 <= self.num_bins
+    #   return self.num_bins
+    assert time_token <= self.num_bins
+    return time_token
   
   def __getitem__(self, idx):
     if idx == 0:
@@ -279,8 +292,17 @@ class BaseDataset(Dataset):
         "output_tokens": output_tokens
       }
     
-    output_text = self.tokenizer.batch_decode(
-      output_tokens, skip_special_tokens=True
+    time_tokens = [[self._get_time_token(st, duration, self.num_bins),
+                    self._get_time_token(ed, duration, self.num_bins)]
+                          for st, ed in zip(start, end)]
+    
+    time_repr = [
+      "<time=" + str(st) + ">" + " " + "<time=" + str(ed) + ">"
+      for st, ed in time_tokens
+    ]
+    assert len(time_repr) == len(text)
+    output_text = " ".join(
+      [f"{time_repr[t_i]} {text[t_i]}" for t_i in range(len(text))]
     )
     
     return {
@@ -340,14 +362,17 @@ class BaseDataset(Dataset):
     )
     assert sampled_frames[-1] <= n_end_frame
     
+    for phase in phases:
+      if phase["start_time"] > n_end:
+        phase["start_time"] = n_end
+        phase["end_time"] = n_end
+      elif phase["end_time"] > n_end:
+        phase["end_time"] = n_end
+    
     view["event_phase"] = phases
     view["n_start"] = n_start
     view["n_end"] = n_end
     view["duration"] = n_end - n_start
-    
-    for phase in phases:
-      if phase["end_time"] > n_end:
-        phase["end_time"] = n_end
     
     return torch.tensor(sampled_frames)
   

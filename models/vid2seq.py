@@ -80,7 +80,6 @@ class Vid2Seq(nn.Module):
     length_penalty=1.0,
     num_captions=1,
     temperature=1,
-    return_dict_in_generate=False,
   ):
     """
     Args:
@@ -114,10 +113,7 @@ class Vid2Seq(nn.Module):
       repetition_penalty=repetition_penalty,
       length_penalty=length_penalty,
       num_return_sequences=num_captions,
-      return_dict_in_generate=return_dict_in_generate,
     )
-    if return_dict_in_generate:
-      return outputs
     
     output_text = self.t5_tokenizer.batch_decode(
       outputs, skip_special_tokens=True

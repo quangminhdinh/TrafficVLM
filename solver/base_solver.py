@@ -71,7 +71,7 @@ class BaseSolver:
         if self.checkpoint_metrics_repr is not None:
             path = self.folder / f'epoch_{self.epoch - 1}_{self.checkpoint_metrics_repr}.th'
         else:
-            path = self.folder / f'epoch_{self.epoch - 1}'
+            path = self.folder / f'epoch_{self.epoch - 1}.th'
         self.checkpoints_list[str(self.epoch - 1)] = str(path)
         return path
 
@@ -97,11 +97,11 @@ class BaseSolver:
             raise RuntimeError("This function can only be called from inside a stage.")
 
     def log_progress(self, stage_name: str, iterable: tp.Iterable,
-                     total: tp.Optional[int] = None, updates: int = 5) -> LogProgressBar:
+                     total: tp.Optional[int] = None, updates: int = 5, **kwargs) -> LogProgressBar:
         """See `flashy.logging.ResultLogger.get_log_progress_bar` for details"""
         return self.result_logger.get_log_progress_bar(
             stage_name, iterable, total=total, updates=updates,
-            step=self.epoch, step_name='epoch', formatter=self.formatter)
+            step=self.epoch, step_name='epoch', formatter=self.formatter, **kwargs)
 
     def log_hyperparams(self, params: dict, metrics: tp.Optional[dict] = None):
         """See `flashy.logging.ResultLogger.log_hyperparams` for details"""

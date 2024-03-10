@@ -12,6 +12,7 @@ from pathlib import Path
 import sys
 import time
 import typing as tp
+from tqdm import tqdm
 
 import colorlog
 from loggers.base import ExperimentLogger
@@ -58,7 +59,7 @@ def setup_logging(
     sh.setFormatter(formatter)
     root_logger.addHandler(sh)
     
-    # logging.getLogger("absl").disabled = True
+    logging.getLogger("absl").disabled = True
 
     if with_file_log:
         # We need to get the rank in a reliable way, even if distributed is not yet initialized.
@@ -118,7 +119,8 @@ class LogProgressBar:
                  level: int = logging.INFO,
                  delimiter: str = '|',
                  items_delimiter: str = ' ',
-                 formatter: Formatter = Formatter()):
+                 formatter: Formatter = Formatter(),
+                 use_tqdm: bool = True):
         self._iterable = iterable
         if total is None:
             assert isinstance(iterable, Sized)
@@ -133,6 +135,7 @@ class LogProgressBar:
         self._delimiter = delimiter
         self._items_delimiter = items_delimiter
         self._formatter = formatter
+        self._use_tqdm = use_tqdm
 
     def update(self, **metrics) -> bool:
         """Update the metrics to show when logging. Return True if logging will
@@ -180,7 +183,10 @@ class LogProgressBar:
             speed = f'{self._speed:.2f} it/sec'
         prefix = [f'{self._name}', f'{self._index}/{self._total}', f'{speed}']
         msg = f' {self._delimiter} '.join(prefix + infos)
-        self._logger.log(self._level, msg)
+        if self._use_tqdm:
+            tqdm.write(msg)
+        else:
+            self._logger.log(self._level, msg)
 
 
 class ResultLogger:
