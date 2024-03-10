@@ -44,33 +44,12 @@ class Vid2Seq(nn.Module):
     if self.t5_model.model_dim != 768:
       self.proj_v2t = nn.Linear(768, self.t5_model.model_dim)
       
-  def forward(self, vehicle, overhead, output_tokenized): # (feats, proj)
-    vehicle_feats, vehicle_proj = vehicle
-    vehicle_feats = self.visual_encoder(vehicle_feats) # B T D
-    if vehicle_proj is not None:
-      vehicle_feats = vehicle_proj(vehicle_feats)
+  def forward(self, feats, output_tokenized): # (feats, proj)
+    feats = self.visual_encoder(feats) # B T D
     if self.proj_v2t is not None:
-      vehicle_feats = self.proj_v2t(vehicle_feats)
-    atts_vehicle = torch.ones(vehicle_feats.size()[:-1], 
-                              dtype=torch.long).to(vehicle_feats.device)
-    
-    if "overhead" in self.feature_branches:
-      overhead_feats, overhead_proj = overhead
-      overhead_feats = self.visual_encoder(overhead_feats) # B T D
-      if overhead_proj is not None:
-        overhead_feats = overhead_proj(overhead_feats)
-      if self.proj_v2t is not None:
-        overhead_feats = self.proj_v2t(overhead_feats)
-      atts_overhead = torch.ones(overhead_feats.size()[:-1], 
-                                dtype=torch.long).to(overhead_feats.device)
-      
-      encoded = BaseModelOutput(
-        last_hidden_state=torch.cat([vehicle_feats, overhead_feats], dim=1) # type: ignore
-      )
-      encoder_atts = torch.cat([atts_vehicle, atts_overhead], dim=1)
-    else:
-      encoded = BaseModelOutput(last_hidden_state=vehicle_feats)
-      encoder_atts = atts_vehicle
+      feats = self.proj_v2t(feats)
+    encoder_atts = torch.ones(feats.size()[:-1], dtype=torch.long).to(feats.device)
+    encoded = BaseModelOutput(last_hidden_state=feats)
     
     targets = output_tokenized['input_ids'].masked_fill(
       output_tokenized['input_ids'] == self.t5_tokenizer.pad_token_id, -100
@@ -91,8 +70,7 @@ class Vid2Seq(nn.Module):
   @torch.no_grad()
   def generate(
     self,
-    vehicle,
-    overhead,
+    feats,
     use_nucleus_sampling=False,
     num_beams=4,
     max_length=256,
@@ -102,11 +80,11 @@ class Vid2Seq(nn.Module):
     length_penalty=1.0,
     num_captions=1,
     temperature=1,
+    return_dict_in_generate=False,
   ):
     """
     Args:
-      vehicle (torch.Tensor, nn.Module | None): A tensor of shape (batch_size, T, D) and an additional projection layer.
-      overhead (torch.Tensor, nn.Module | None): A tensor of shape (batch_size, T, D) and an additional projection layer.
+      feats (torch.Tensor): A tensor of shape (batch_size, T, D).
       use_nucleus_sampling (bool): Whether to use nucleus sampling. If False, use top-k sampling.
       num_beams (int): Number of beams for beam search. 1 means no beam search.
       max_length (int): The maximum length of the sequence to be generated.
@@ -117,32 +95,11 @@ class Vid2Seq(nn.Module):
     Returns:
       captions (list): A list of strings of length batch_size * num_captions.
     """
-    vehicle_feats, vehicle_proj = vehicle
-    vehicle_feats = self.visual_encoder(vehicle_feats) # B T D
-    if vehicle_proj is not None:
-      vehicle_feats = vehicle_proj(vehicle_feats)
+    feats = self.visual_encoder(feats) # B T D
     if self.proj_v2t is not None:
-      vehicle_feats = self.proj_v2t(vehicle_feats)
-    atts_vehicle = torch.ones(vehicle_feats.size()[:-1], 
-                              dtype=torch.long).to(vehicle_feats.device)
-    
-    if "overhead" in self.feature_branches:
-      overhead_feats, overhead_proj = overhead
-      overhead_feats = self.visual_encoder(overhead_feats) # B T D
-      if overhead_proj is not None:
-        overhead_feats = overhead_proj(overhead_feats)
-      if self.proj_v2t is not None:
-        overhead_feats = self.proj_v2t(overhead_feats)
-      atts_overhead = torch.ones(overhead_feats.size()[:-1], 
-                                dtype=torch.long).to(overhead_feats.device)
-      
-      encoded = BaseModelOutput(
-        last_hidden_state=torch.cat([vehicle_feats, overhead_feats], dim=1) # type: ignore
-      )
-      encoder_atts = torch.cat([atts_vehicle, atts_overhead], dim=1)
-    else:
-      encoded = BaseModelOutput(last_hidden_state=vehicle_feats)
-      encoder_atts = atts_vehicle
+      feats = self.proj_v2t(feats)
+    encoder_atts = torch.ones(feats.size()[:-1], dtype=torch.long).to(feats.device)
+    encoded = BaseModelOutput(last_hidden_state=feats)
     
     assert type(self.t5_model) is T5ForConditionalGeneration
     outputs = self.t5_model.generate(
@@ -157,7 +114,11 @@ class Vid2Seq(nn.Module):
       repetition_penalty=repetition_penalty,
       length_penalty=length_penalty,
       num_return_sequences=num_captions,
+      return_dict_in_generate=return_dict_in_generate,
     )
+    if return_dict_in_generate:
+      return outputs
+    
     output_text = self.t5_tokenizer.batch_decode(
       outputs, skip_special_tokens=True
     )

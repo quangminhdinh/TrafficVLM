@@ -18,7 +18,8 @@ class BaseDataset(Dataset):
                dataset_ratios, # -1, num
                tokenizer,
                feature_branches=["vehicle"],
-               random_pad_time=True):
+               random_pad_time=True,
+               return_raw_text=False,):
     
     super().__init__()
     
@@ -31,6 +32,8 @@ class BaseDataset(Dataset):
     self.random_pad_time = random_pad_time
     self.tokenizer = tokenizer
     
+    self.return_raw_text = return_raw_text
+    
     self.sample_fps = cfg.FPS
     self.extract_fps = cfg.EXTRACT_FPS
     
@@ -40,10 +43,11 @@ class BaseDataset(Dataset):
     self.num_text_tokens = len(tokenizer) - self.num_bins
     
     self.feature_branches = feature_branches
-    print(f"Using features: {', '.join(self.feature_branches)}.")
+    if self.feature_branches is not None:
+      print(f"Using features: {', '.join(self.feature_branches)}.")
     
     dataset_names = [d["name"] for d in dataset_ratios]
-    self.dataset_path_cfgs = get_dataset_paths(dataset_names)
+    self.dataset_path_cfgs = get_dataset_paths(*dataset_names)
     
     if len(dataset_names) > 1:
       print(f"Merging samples from: {', '.join(dataset_names)}.")
@@ -52,13 +56,16 @@ class BaseDataset(Dataset):
     fixed_len = 0
     for idx, ds_cfg in enumerate(self.dataset_path_cfgs):
       ds_cfg["ratio"] = dataset_ratios[idx]["ratio"]
+      scenarios = get_all_top(ds_cfg["features"])
+      scenarios.sort()
       if ds_cfg["ratio"] > 0:
-        ds_cfg["all_scenarios"] = get_all_top(ds_cfg["features"]).sort()
+        ds_cfg["all_scenarios"] = scenarios
+        ds_cfg["broken"] = []
         assert self.cutoff_ds is None
         self.cutoff_ds = ds_cfg
       else:
-        ds_cfg["scenarios"] = get_all_top(ds_cfg["features"]).sort()
-        ds_cfg["len"] = len(ds_cfg["scenarios"])
+        ds_cfg["scenarios"] = scenarios
+        self._perform_integrity_check(ds_cfg)
         fixed_len += ds_cfg["len"]
         
     if self.cutoff_ds is not None:
@@ -66,8 +73,8 @@ class BaseDataset(Dataset):
       self.cutoff_ds["len"] = int(fixed_len / (1 - self.cutoff_ds["ratio"])) - fixed_len
       actual_len = len(self.cutoff_ds["all_scenarios"])
       if self.cutoff_ds["len"] > actual_len:
-        print(f"WARNING: {self.cutoff_ds['name']}'s cutoff length ({self.cutoff_ds['len']}) \
-          is higher than actual length ({actual_len}). Setting cutoff length to {actual_len}...")
+        print(f"WARNING: {self.cutoff_ds['name']}'s cutoff length ({self.cutoff_ds['len']}) "
+          "is higher than actual length ({actual_len}). Setting cutoff length to {actual_len}...")
         self.cutoff_ds["len"] = actual_len
         self.cutoff_ds["scenarios"] = self.cutoff_ds["all_scenarios"]
         self.cutoff_ds = None
@@ -79,6 +86,12 @@ class BaseDataset(Dataset):
     for idx, ds_cfg in enumerate(self.dataset_path_cfgs):
       scenarios_num = len(ds_cfg["scenarios"])
       print(f"- {ds_cfg['name']}: {scenarios_num}.")
+      if len(ds_cfg["broken"]) > 0:
+        print("Removing", len(ds_cfg["broken"]), "corrupted samples:")
+        for broken_scenario in ds_cfg["broken"]:
+          print(f"\t- {ds_cfg['name']}, {broken_scenario}.")
+      else:
+        print()
       self.ds_indices += [idx] * scenarios_num
       self.ds_scenario_start_indice.append(self.ds_scenario_start_indice[-1] + scenarios_num)
     assert self.ds_scenario_start_indice[-1] == len(self.ds_indices)
@@ -92,8 +105,42 @@ class BaseDataset(Dataset):
     scenario = ds_cfg["scenarios"][idx - self.ds_scenario_start_indice[ds_idx]].strip()
     return ds_cfg, scenario
   
+  # def _perform_external_integrity_check(self, ds_cfg):
+  #   eligible = []
+  #   broken = []
+  #   for scenario in ds_cfg["scenarios"]
+  
+  def _perform_integrity_check(self, ds_cfg):
+    if ds_cfg["bbox_vehicle"] is None:
+      ds_cfg["broken"] = []
+      ds_cfg["len"] = len(ds_cfg["scenarios"])
+      return
+    eligible = []
+    broken = []
+    ds_cfg["usable"] = []
+    for scenario in ds_cfg["scenarios"]:
+      usable = ["vehicle", "overhead"]
+      if "vehicle" in self.feature_branches or "mix" in self.feature_branches:
+        local_dir = os.path.join(ds_cfg["features"], scenario, "vehicle_view")
+        if len(os.listdir(local_dir)) == 0:
+          usable.remove("vehicle")
+      if "overhead" in self.feature_branches or "mix" in self.feature_branches:
+        local_dir = os.path.join(ds_cfg["features"], scenario, "overhead_view")
+        if len(os.listdir(local_dir)) == 0:
+          usable.remove("overhead")
+      if len(usable) == 0:
+        broken.append(scenario)
+      else:
+        eligible.append(scenario)
+        ds_cfg["usable"].append(usable)
+    if "broken" not in ds_cfg:
+      ds_cfg["broken"] = []
+    ds_cfg["broken"] += broken
+    ds_cfg["scenarios"] = eligible
+    ds_cfg["len"] = len(eligible)
+  
   def _load_view_caption(self, ds_cfg, scenario, view, feat_dict):
-    caption_dir = os.path.join(ds_cfg["annotations"], scenario, view)
+    caption_dir = os.path.join(ds_cfg["captions"], scenario, view)
     caption_path = os.path.join(caption_dir, sample_files(caption_dir)) # type: ignore
     with open(caption_path, 'r') as caption_file:
       cap = json.load(caption_file)
@@ -101,10 +148,15 @@ class BaseDataset(Dataset):
   
   def _load_caption(self, ds_cfg, scenario, is_external, feat_dict={}):
     if is_external:
-      caption_path = os.path.join(ds_cfg["annotations"], f"{scenario}.json")
+      caption_path = os.path.join(ds_cfg["captions"], f"{scenario}_caption.json")
       with open(caption_path, 'r') as caption_file:
         cap = json.load(caption_file)
       feat_dict["vehicle_view"] = cap
+      return
+    if len(ds_cfg["usable"]) == 1 and \
+      (ds_cfg["usable"][0] in self.feature_branches or "mix" in self.feature_branches):
+      view = f"{ds_cfg['usable'][0]}_view"
+      self._load_view_caption(ds_cfg, scenario, view, feat_dict)
       return
     if "mix" in self.feature_branches:
       view = "overhead_view" if np.random.uniform() < self.overhead_ratio else "vehicle_view"
@@ -221,20 +273,34 @@ class BaseDataset(Dataset):
     output_tokens = torch.cat([output_tokens, 
                                torch.LongTensor([self.tokenizer.eos_token_id])], 0)
     
+    if not self.return_raw_text:
+      return {
+        "feat": feat,
+        "output_tokens": output_tokens
+      }
+    
+    output_text = self.tokenizer.batch_decode(
+      output_tokens, skip_special_tokens=True
+    )
+    
     return {
       "feat": feat,
-      "output_tokens": output_tokens
+      "output_tokens": output_tokens,
+      "output_text": output_text,
     }
   
   def __len__(self):
     return len(self.ds_indices)
   
   def _get_time(self, view, all_frames):
-    phases = view["event_phase"][::-1]
+    phases = view["event_phase"]
     
     for phase in phases:
       phase["start_time"] = float(phase["start_time"])
       phase["end_time"] = float(phase["end_time"])
+    
+    if phases[-1]["end_time"] < phases[0]["start_time"]:
+      phases = phases[::-1]
     
     start_frame = int(phases[0]["start_time"] * self.extract_fps)
     for idx, frame in enumerate(all_frames):

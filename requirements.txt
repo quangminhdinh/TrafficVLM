@@ -11,3 +11,8 @@ tokenizers==0.15.2
 nltk==3.8.1
 matplotlib==3.8.3
 apex==0.1
+ftfy
+nltk>=3.8
+rouge-score
+sentencepiece==0.2.0
+sentence-transformers==2.4.0

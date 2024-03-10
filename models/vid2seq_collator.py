@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from .vid2seq import Vid2Seq
 from .utils import freeze_module, total_parameters
@@ -18,28 +19,14 @@ class Vid2SeqCollator(nn.Module):
     super().__init__()
     
     self.num_bins = num_bins
+    self.label_smoothing = cfg.LABEL_SMOOTHING
     
     print("\nInitializing Vid2Seq model...")
     self.model = Vid2Seq(cfg, tokenizer, num_bins, num_features)
     assert type(self.model.t5_model) is T5ForConditionalGeneration
     pre_params = total_parameters(self.model)
     freeze_module(self.model.t5_model.encoder)
-    print("Number of freezed encoder parameters:", total_parameters(self.model) - pre_params)
-    
-    self.use_vehicle_proj = cfg.VEHICLE_PROJ
-    self.use_overhead_proj = cfg.OVERHEAD_PROJ and "overhead" in cfg.FEATURE_BRANCHES
-    
-    self.vehicle_proj = Mlp(
-      self.model.t5_model.model_dim, 
-      cfg.FEAT_MLP_DIM
-    ) if self.use_vehicle_proj else None
-    self.overhead_proj = Mlp(
-      self.model.t5_model.model_dim, 
-      cfg.FEAT_MLP_DIM
-    ) if self.use_overhead_proj else None
-    
-    if "overhead" in self.model.feature_branches:
-      self.overhead_unk = nn.Parameter(torch.zeros(features_dim))
+    print("Number of freezed encoder parameters:", pre_params - total_parameters(self.model))
     
     self.pretrained_ckpt = cfg.VID2SEQ_PATH
     self.load_ckpt = cfg.LOAD_VID2SEQ_CKPT
@@ -56,6 +43,15 @@ class Vid2SeqCollator(nn.Module):
                       for feat in overhead_feats]
     return torch.stack(overhead_feats) # type: ignore
   
+  def calculate_loss_from_logits(self, logits, labels):
+    return F.cross_entropy(
+      logits.view(-1, logits.size(-1)), 
+      labels.view(-1), 
+      ignore_index=-100, 
+      label_smoothing=self.label_smoothing
+    )
+  
+  @torch.no_grad()
   def normalize_time_embeddings(self):
     t5 = self.model.t5_model
     assert isinstance(t5, T5ForConditionalGeneration)
@@ -71,58 +67,12 @@ class Vid2SeqCollator(nn.Module):
       torch.norm(trainable_weight, dim=1).mean(0) / frozen_norm
     )
   
-  def forward(self, vehicle_feats, overhead_feats, output_tokens):
-    overhead_feats = self._fill_overhead(overhead_feats)
-    assert overhead_feats.size() == vehicle_feats.size()
-    
+  def forward(self, feats, output_tokens):
     return self.model(
-      (vehicle_feats, self.vehicle_proj),
-      (overhead_feats, self.overhead_proj),
+      feats,
       {'input_ids': output_tokens, 'attention_mask': output_tokens != 0}
     )
     
   @torch.no_grad()
-  def generate(
-    self,
-    vehicle,
-    overhead,
-    use_nucleus_sampling=False,
-    num_beams=4,
-    max_length=256,
-    min_length=1,
-    top_p=0.9,
-    repetition_penalty=1.0,
-    length_penalty=1.0,
-    num_captions=1,
-    temperature=1,
-  ):
-    """
-    Args:
-      vehicle (torch.Tensor): A tensor of shape (batch_size, T, D).
-      overhead (torch.Tensor): A tensor of shape (batch_size, T, D).
-      use_nucleus_sampling (bool): Whether to use nucleus sampling. If False, use top-k sampling.
-      num_beams (int): Number of beams for beam search. 1 means no beam search.
-      max_length (int): The maximum length of the sequence to be generated.
-      min_length (int): The minimum length of the sequence to be generated.
-      top_p (float): The cumulative probability for nucleus sampling.
-      repetition_penalty (float): The parameter for repetition penalty. 1.0 means no penalty.
-      num_captions (int): Number of captions to be generated for each image.
-    Returns:
-      captions (list): A list of strings of length batch_size * num_captions.
-    """
-    overhead = self._fill_overhead(overhead)
-    assert overhead.size() == vehicle.size()
-    
-    return self.model.generate(
-      (vehicle, self.vehicle_proj),
-      (overhead, self.overhead_proj),
-      use_nucleus_sampling,
-      num_beams,
-      max_length,
-      min_length,
-      top_p,
-      repetition_penalty,
-      length_penalty,
-      num_captions,
-      temperature,
-    )
+  def generate(self, *args, **kwargs):
+    return self.model.generate(*args, **kwargs)

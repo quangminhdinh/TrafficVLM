@@ -29,6 +29,7 @@ class BaseSolver:
     def __init__(self, cfg, signature, experiment_name: str, local_folder: str) -> None:
         self.train_cfg = cfg.TRAIN
         self.optim_cfg = self.train_cfg.OPTIMIZER
+        self.val_cfg = cfg.VAL
         self.signature = signature
         
         self.stateful = StateManager()
@@ -45,12 +46,15 @@ class BaseSolver:
         self._current_stage: tp.Optional[str] = None
         self._current_formatter: tp.Optional[Formatter] = None
         self._start_epoch()
+        self.history: tp.List[tp.Dict[str, tp.Any]] = []
+        self.checkpoints_list: tp.Dict[str, str] = {}
         self.register_stateful('history', 'checkpoints_list')
+        
+        self.max_trial_nums = cfg.FAULT_TOLERANCE
+        self._retry_count = 0
 
     def _start_epoch(self) -> None:
         self._pending_metrics: tp.Dict[str, tp.Any] = {}
-        self.history: tp.List[tp.Dict[str, tp.Any]] = []
-        self.checkpoints_list: tp.Dict[str, str] = {}
         
     @property
     def load_path(self) -> tp.Optional[str]:
@@ -208,6 +212,13 @@ class BaseSolver:
                 metrics = {}
             metrics["duration"] = time.time() - begin
             self.log_metrics(stage_name, metrics)
+        except Exception as e:
+            self._retry_count += 1
+            self.logger.exception(f"TRIAL {self._retry_count}. "
+                                  f"Exception encountered at epoch {self.epoch}: {e}")
+            metrics = {}
+            if self._retry_count > self.max_trial_nums:
+                raise RuntimeError("Max number of trials reached!")
         finally:
             self._current_stage = None
             self._current_formatter = None

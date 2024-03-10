@@ -6,6 +6,8 @@ _C = CN()
 
 _C.GLOB = CN()
 _C.GLOB.EXP_PARENT_DIR = "/home/logs"
+_C.GLOB.SEED = 42
+_C.GLOB.DEVICE = "cuda"
 
 
 # Dataset configurations
@@ -53,32 +55,49 @@ _C.MODEL.VEHICLE_PROJ = False
 _C.MODEL.OVERHEAD_PROJ = False
 _C.MODEL.FEAT_MLP_DIM = 768
 
-_C.MODEL.VID2SEQ_PATH = None # ADD CHECKPOINT HERE
+_C.MODEL.VID2SEQ_PATH = "/home/pretrained/vid2seq_htmchaptersvitt.pth"
 _C.MODEL.LOAD_VID2SEQ_CKPT = True
 
 
 _C.SOLVER = CN()
 _C.SOLVER.LOAD_FROM_EPOCH = -1
+_C.SOLVER.FAULT_TOLERANCE = 5
+_C.SOLVER.LOG_TO_WANDB = False
 
 _C.SOLVER.TRAIN = CN()
 _C.SOLVER.TRAIN.MAX_EPOCH = 100
+_C.SOLVER.TRAIN.BATCH_SIZE = 1
+
 _C.SOLVER.TRAIN.LOG_UPDATES = 5
-_C.SOLVER.TRAIN.CHECKPOINT_METRICS = [] # ROGUE, ...
+_C.SOLVER.TRAIN.CHECKPOINT_METRICS = ['tIoU 0.0/AVG']
 _C.SOLVER.TRAIN.SAVE_INTERVAL = 5
+
+_C.SOLVER.TRAIN.CLIP_MAX_NORM = 1.
 
 _C.SOLVER.TRAIN.OPTIMIZER = CN()
 _C.SOLVER.TRAIN.OPTIMIZER.FRACTION_WARMUP_STEPS = 0.1
 _C.SOLVER.TRAIN.OPTIMIZER.SCHEDULE = ""
 _C.SOLVER.TRAIN.OPTIMIZER.LR = 3e-4
+_C.SOLVER.TRAIN.OPTIMIZER.BETA1 = 0.9
+_C.SOLVER.TRAIN.OPTIMIZER.BETA2 = 0.999
+_C.SOLVER.TRAIN.OPTIMIZER.WEIGHT_DECAY = 0.
 
-_C.SOLVER.TRAIN.CLIP_MAX_NORM = 1.
+_C.SOLVER.VAL = CN()
+_C.SOLVER.VAL.VAL_INTERVAL = 5
+_C.SOLVER.VAL.BATCH_SIZE = None
+
+_C.SOLVER.VAL.NUM_BEAMS = 4
+_C.SOLVER.VAL.TOP_P = 0.9
+_C.SOLVER.VAL.REPETITION_PENALTY = 1.
+_C.SOLVER.VAL.LENGTH_PENALTY = 1.
+_C.SOLVER.VAL.TEMPERATURE = 1.
 
 
 def get_cfg_defaults():
   return _C.clone()
 
 
-def convert_to_dict(cfg_node, key_list):
+def convert_to_dict(cfg_node, key_list=[]):
   if not isinstance(cfg_node, CN):
     return cfg_node
   else:
@@ -87,7 +106,7 @@ def convert_to_dict(cfg_node, key_list):
       cfg_dict[k] = convert_to_dict(v, key_list + [k])
     return cfg_dict
   
-def _get_sig(cfg_dict):
+def get_sig(cfg_dict):
   import json
   from hashlib import sha1
   

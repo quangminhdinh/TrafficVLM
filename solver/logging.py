@@ -57,10 +57,14 @@ def setup_logging(
     sh.setLevel(level)
     sh.setFormatter(formatter)
     root_logger.addHandler(sh)
+    
+    logging.getLogger("absl").disabled = True
 
     if with_file_log:
         # We need to get the rank in a reliable way, even if distributed is not yet initialized.
-        fh = logging.FileHandler(Path(folder) / log_name)
+        log_path = Path(folder)
+        log_path.mkdir(exist_ok=True, parents=True)
+        fh = logging.FileHandler(log_path / log_name)
         fh.setLevel(level)
         fh.setFormatter(formatter)
         root_logger.addHandler(fh)
