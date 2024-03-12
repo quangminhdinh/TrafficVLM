@@ -32,6 +32,9 @@ class Vid2SeqCollator(nn.Module):
     self.load_ckpt = cfg.LOAD_VID2SEQ_CKPT
     if self.load_ckpt:
       assert self.pretrained_ckpt is not None
+    
+    self.vehicle_embed = nn.Parameter(torch.rand(cfg.TARGET_EMBED_SIZE, features_dim))
+    self.pedestrian_embed = nn.Parameter(torch.rand(cfg.TARGET_EMBED_SIZE, features_dim))
       
   def load_pretrained(self, model_ckpt):
     self.model.load_state_dict(model_ckpt, strict=False)
@@ -67,12 +70,64 @@ class Vid2SeqCollator(nn.Module):
       torch.norm(trainable_weight, dim=1).mean(0) / frozen_norm
     )
   
-  def forward(self, feats, output_tokens):
+  def forward(self, feats, output_tokens, tgt_type):
+    if tgt_type == "vehicle":
+      tgt_embed = self.vehicle_embed
+    elif tgt_type == "pedestrian":
+      tgt_embed = self.pedestrian_embed
+    tgt_embed = torch.unsqueeze(tgt_embed, 0)
+    tgt_embed = tgt_embed.repeat(len(feats), 1, 1)
     return self.model(
       feats,
+      tgt_embed,
       {'input_ids': output_tokens, 'attention_mask': output_tokens != 0}
     )
     
   @torch.no_grad()
-  def generate(self, *args, **kwargs):
-    return self.model.generate(*args, **kwargs)
+  def generate(
+    self,
+    feats,
+    tgt_type,
+    use_nucleus_sampling=False,
+    num_beams=4,
+    max_length=256,
+    min_length=1,
+    top_p=0.9,
+    repetition_penalty=1.0,
+    length_penalty=1.0,
+    num_captions=1,
+    temperature=1,
+  ):
+    """
+    Args:
+      feats (torch.Tensor): A tensor of shape (batch_size, T, D).
+      tgt_type (string): Output type (vehicle or pedestrian).
+      use_nucleus_sampling (bool): Whether to use nucleus sampling. If False, use top-k sampling.
+      num_beams (int): Number of beams for beam search. 1 means no beam search.
+      max_length (int): The maximum length of the sequence to be generated.
+      min_length (int): The minimum length of the sequence to be generated.
+      top_p (float): The cumulative probability for nucleus sampling.
+      repetition_penalty (float): The parameter for repetition penalty. 1.0 means no penalty.
+      num_captions (int): Number of captions to be generated for each image.
+    Returns:
+      captions (list): A list of strings of length batch_size * num_captions.
+    """
+    if tgt_type == "vehicle":
+      tgt_embed = self.vehicle_embed
+    elif tgt_type == "pedestrian":
+      tgt_embed = self.pedestrian_embed
+    tgt_embed = torch.unsqueeze(tgt_embed, 0)
+    tgt_embed = tgt_embed.repeat(len(feats), 1, 1)
+    return self.model.generate(
+      feats,
+      tgt_embed,
+      use_nucleus_sampling=use_nucleus_sampling,
+      num_beams=num_beams,
+      max_length=max_length,
+      min_length=min_length,
+      top_p=top_p,
+      repetition_penalty=repetition_penalty,
+      length_penalty=length_penalty,
+      num_captions=num_captions,
+      temperature=temperature,
+    )

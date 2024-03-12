@@ -44,12 +44,16 @@ class Vid2Seq(nn.Module):
     if self.t5_model.model_dim != 768:
       self.proj_v2t = nn.Linear(768, self.t5_model.model_dim)
       
-  def forward(self, feats, output_tokenized): # (feats, proj)
+  def forward(self, feats, target_embed, output_tokenized): # (feats, proj)
     feats = self.visual_encoder(feats) # B T D
     if self.proj_v2t is not None:
       feats = self.proj_v2t(feats)
-    encoder_atts = torch.ones(feats.size()[:-1], dtype=torch.long).to(feats.device)
-    encoded = BaseModelOutput(last_hidden_state=feats)
+    feats_atts = torch.ones(feats.size()[:-1], dtype=torch.long).to(feats.device)
+    encoded = BaseModelOutput(
+      last_hidden_state=torch.cat([feats, target_embed], dim=1) # type: ignore
+    )
+    tgt_embed_atts = torch.ones(target_embed.size()[:-1], dtype=torch.long).to(feats.device)
+    encoder_atts = torch.cat([feats_atts, tgt_embed_atts], dim=1)
     
     targets = output_tokenized['input_ids'].masked_fill(
       output_tokenized['input_ids'] == self.t5_tokenizer.pad_token_id, -100
@@ -71,6 +75,7 @@ class Vid2Seq(nn.Module):
   def generate(
     self,
     feats,
+    target_embed,
     use_nucleus_sampling=False,
     num_beams=4,
     max_length=256,
@@ -84,6 +89,7 @@ class Vid2Seq(nn.Module):
     """
     Args:
       feats (torch.Tensor): A tensor of shape (batch_size, T, D).
+      target_embed (torch.Tensor): A tensor of shape (batch_size, T, D).
       use_nucleus_sampling (bool): Whether to use nucleus sampling. If False, use top-k sampling.
       num_beams (int): Number of beams for beam search. 1 means no beam search.
       max_length (int): The maximum length of the sequence to be generated.
@@ -97,8 +103,12 @@ class Vid2Seq(nn.Module):
     feats = self.visual_encoder(feats) # B T D
     if self.proj_v2t is not None:
       feats = self.proj_v2t(feats)
-    encoder_atts = torch.ones(feats.size()[:-1], dtype=torch.long).to(feats.device)
-    encoded = BaseModelOutput(last_hidden_state=feats)
+    feats_atts = torch.ones(feats.size()[:-1], dtype=torch.long).to(feats.device)
+    encoded = BaseModelOutput(
+      last_hidden_state=torch.cat([feats, target_embed], dim=1) # type: ignore
+    )
+    tgt_embed_atts = torch.ones(target_embed.size()[:-1], dtype=torch.long).to(feats.device)
+    encoder_atts = torch.cat([feats_atts, tgt_embed_atts], dim=1)
     
     assert type(self.t5_model) is T5ForConditionalGeneration
     outputs = self.t5_model.generate(

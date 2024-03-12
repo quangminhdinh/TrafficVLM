@@ -1,6 +1,6 @@
 SOLVER:
   TRAIN:
-    BATCH_SIZE: 6
+    BATCH_SIZE: 7
   VAL:
     VAL_INTERVAL: 1
   LOG_TO_WANDB: True

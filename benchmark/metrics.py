@@ -127,6 +127,33 @@ def compute_mean_metrics(metrics_overall, num_segments_overall):
 
     return metrics_mean
 
+
+def batch_evaluate_scenario(pred_all_sentences, gt_all_sentences) -> Dict[str, float]:
+    metrics_all_category_means = {}
+    raw_metrics = [
+        compute_metrics_single(
+            pred, gt, 1, 0
+        ) for pred, gt in zip(pred_all_sentences, gt_all_sentences)
+    ]
+    
+    raw_metrics_dict = {}
+    for k in raw_metrics[0].keys():
+        raw_metrics_dict[f"{k.upper()}"] = [met[k] for met in raw_metrics]
+    
+    raw_total = 0
+    for k, v in raw_metrics_dict.items():
+        met = sum(v) / len(v)
+        metrics_all_category_means[k] = met
+        
+        if k != "cider".upper():
+            raw_total += met * 10
+        else:
+            raw_total += met * 100
+            
+    metrics_all_category_means["TOTAL"] = raw_total / 4
+    return metrics_all_category_means
+
+
 def batch_evaluate(pred_all_sentences, gt_all_sentences, tiou_thresholds=[0.0, 0.3, 0.5, 0.7]) -> Dict[str, float]:
     """Evaluate the predictions and ground truth and return the mean score.
     Parameters:

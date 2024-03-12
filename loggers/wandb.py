@@ -171,7 +171,8 @@ class WandbLogger(ExperimentLogger):
             }
         else:
             metrics = {
-                key[0].split("_")[0]: wandb.Table(columns=[*key], data=[text], **kwargs)
+                "_".join(key[0].split("_")[:-1]): 
+                    wandb.Table(columns=[*key], data=[text], **kwargs)
             }
         metrics = _add_prefix(metrics, prefix, self.group_separator)
         self.log_metrics(prefix, metrics, step)

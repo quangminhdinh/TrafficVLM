@@ -17,10 +17,11 @@ _C.DATA = CN()
 _C.DATA.TRAIN_DATASETS = [
   { "name": "wts_train_main", "ratio": -1 },
   { "name": "wts_train_external", "ratio": -1 },
+  { "name": "wts_val_external", "ratio": -1 },
 ]
 _C.DATA.VAL_DATASETS = [
   { "name": "wts_val_main", "ratio": -1 },
-  { "name": "wts_val_external", "ratio": -1 },
+  # { "name": "wts_val_external", "ratio": -1 },
 ]
 _C.DATA.TEST_DATASETS = [
   { "name": "wts_test_main", "ratio": -1 },
@@ -29,7 +30,7 @@ _C.DATA.TEST_DATASETS = [
 
 _C.DATA.MAX_FEATS = 100
 _C.DATA.FEATURES_DIM = 768
-_C.DATA.MAX_OUTPUT_TOKENS = 512
+_C.DATA.MAX_OUTPUT_TOKENS = 256
 _C.DATA.MAX_PAD_TIME = 5 #s
 _C.DATA.TRAIN_RANDOM_PAD_TIME = True
 _C.DATA.NUM_BINS = 100
@@ -59,6 +60,7 @@ _C.MODEL.FEATURE_BRANCHES = ["mix"] # ["vehicle", "overhead", "mix"]
 _C.MODEL.VEHICLE_PROJ = False
 _C.MODEL.OVERHEAD_PROJ = False
 _C.MODEL.FEAT_MLP_DIM = 768
+_C.MODEL.TARGET_EMBED_SIZE = 2
 
 _C.MODEL.VID2SEQ_PATH = "/home/pretrained/vid2seq_htmchaptersvitt.pth"
 _C.MODEL.LOAD_VID2SEQ_CKPT = True

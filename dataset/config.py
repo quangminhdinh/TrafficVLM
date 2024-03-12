@@ -72,4 +72,4 @@ def get_dataset_paths(*args):
 
   ds_configs = [cfg for cfg in AVAILABLE_DATASETS if cfg["name"] in args]
   assert len(ds_configs) == len(args)
-  return ds_configs[0] if len(ds_configs) == 1 else ds_configs
+  return ds_configs

@@ -255,30 +255,6 @@ class BaseDataset(Dataset):
     assert time_token <= self.num_bins
     return time_token
   
-  def _get_output_tokens(self, text, time_output_tokens):
-    text_output_tokens = [self.tokenizer(x, 
-                                         add_special_tokens=False, 
-                                         max_length=self.max_output_tokens,
-                                         padding="do_not_pad",
-                                         truncation=True,
-                                         return_tensors="pt")['input_ids'][0]
-                          for x in text]
-    output_tokens = [torch.cat([ti, te], 0) 
-                     for ti, te in zip(time_output_tokens, text_output_tokens)]
-    output_tokens = torch.cat(output_tokens, 0)
-    output_tokens = output_tokens[:self.max_output_tokens - 1]
-    return torch.cat([output_tokens, torch.LongTensor([self.tokenizer.eos_token_id])], 0)
-  
-  def _get_output_text(self, text, time_tokens):
-    time_repr = [
-      "<time=" + str(st) + ">" + " " + "<time=" + str(ed) + ">"
-      for st, ed in time_tokens
-    ]
-    assert len(time_repr) == len(text)
-    return " ".join(
-      [f"{time_repr[t_i]} {text[t_i]}" for t_i in range(len(text))]
-    )
-  
   def __getitem__(self, idx):
     if idx == 0:
       self._redistribute_cutoff_samples()
@@ -297,39 +273,50 @@ class BaseDataset(Dataset):
     
     start = [phase["start_time"] - view["n_start"] for phase in phases]
     end = [phase["end_time"] - view["n_start"] for phase in phases]
-    
+    text = [simple_text_preprocess(
+      f"pedestrian: {self.augmentor.apply_nlp_long_sentence(phase['caption_pedestrian'])} "
+      f"vehicle: {self.augmentor.apply_nlp_long_sentence(phase['caption_vehicle'])}"
+    ) for phase in phases]
     time_output_tokens = [torch.LongTensor([self.time_tokenize(st, duration, self.num_bins),
                                             self.time_tokenize(ed, duration, self.num_bins)])
                           for st, ed in zip(start, end)]
-                                       
-    vehicle_text = [
-      self.augmentor.apply_nlp_long_sentence(p['caption_vehicle']) for p in phases
-    ]                   
-    vehicle_tokens = self._get_output_tokens(vehicle_text, time_output_tokens)
-    pedestrian_text = [
-      self.augmentor.apply_nlp_long_sentence(p['caption_pedestrian']) for p in phases
-    ]  
-    pedestrian_tokens = self._get_output_tokens(pedestrian_text, time_output_tokens)
+    text_output_tokens = [self.tokenizer(x, 
+                                         add_special_tokens=False, 
+                                         max_length=self.max_output_tokens,
+                                         padding="do_not_pad",
+                                         truncation=True,
+                                         return_tensors="pt")['input_ids'][0]
+                          for x in text]
+    output_tokens = [torch.cat([ti, te], 0) 
+                     for ti, te in zip(time_output_tokens, text_output_tokens)]
+    output_tokens = torch.cat(output_tokens, 0)
+    output_tokens = output_tokens[:self.max_output_tokens - 1]
+    output_tokens = torch.cat([output_tokens, 
+                               torch.LongTensor([self.tokenizer.eos_token_id])], 0)
     
     if not self.return_raw_text:
       return {
         "feat": feat,
-        "vehicle_tokens": vehicle_tokens,
-        "pedestrian_tokens": pedestrian_tokens
+        "output_tokens": output_tokens
       }
     
     time_tokens = [[self._get_time_token(st, duration, self.num_bins),
                     self._get_time_token(ed, duration, self.num_bins)]
                           for st, ed in zip(start, end)]
-    vehicle_output_text = self._get_output_text(vehicle_text, time_tokens)
-    pedestrian_output_text = self._get_output_text(pedestrian_text, time_tokens)
+    
+    time_repr = [
+      "<time=" + str(st) + ">" + " " + "<time=" + str(ed) + ">"
+      for st, ed in time_tokens
+    ]
+    assert len(time_repr) == len(text)
+    output_text = " ".join(
+      [f"{time_repr[t_i]} {text[t_i]}" for t_i in range(len(text))]
+    )
     
     return {
       "feat": feat,
-      "vehicle_tokens": vehicle_tokens,
-      "pedestrian_tokens": pedestrian_tokens,
-      "vehicle_text": vehicle_output_text,
-      "pedestrian_text": pedestrian_output_text,
+      "output_tokens": output_tokens,
+      "output_text": output_text,
     }
   
   def __len__(self):

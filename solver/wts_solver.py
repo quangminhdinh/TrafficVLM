@@ -10,7 +10,7 @@ from .optimizer import adjust_learning_rate
 from .formatter import Formatter
 from .utils import averager
 
-from benchmark import batch_evaluate, probe_metrics
+from benchmark import batch_evaluate_scenario, probe_metrics
 
 class WTSSolver(BaseSolver):
   
@@ -75,7 +75,7 @@ class WTSSolver(BaseSolver):
         
         valid_metrics = prev_metrics["valid"]
         metrics_repr = [
-            f"{k}_{str(valid_metrics[k])}" 
+            f"{'_'.join(k.split('/'))}_{str('{:.3f}'.format(valid_metrics[k]))}" 
             for k in self.checkpoint_metrics if k in valid_metrics
         ]
         # assert len(metrics_repr) == len(self.checkpoint_metrics)
@@ -125,12 +125,17 @@ class WTSSolver(BaseSolver):
         for idx, batch in tqdm(enumerate(lp), leave=False, total=num_samples, 
                                desc=f"Epoch {self.epoch}/{self.max_epoch}"):
             feat = batch["feat"].to(self.device)
-            output_tokens = batch["output_tokens"].to(self.device)
+            vehicle_tokens = batch["vehicle_tokens"].to(self.device)
+            pedestrian_tokens = batch["pedestrian_tokens"].to(self.device)
             
-            loss = self.model(feat, output_tokens)
-            if not math.isfinite(loss.item()):
+            vehicle_loss = self.model(feat, vehicle_tokens, "vehicle")
+            pedestrian_loss = self.model(feat, pedestrian_tokens, "pedestrian")
+            if not math.isfinite(vehicle_loss.item()) or \
+                not math.isfinite(pedestrian_loss.item()):
                 print("Loss is {}, stopping training".format(loss.item()))
                 sys.exit(1)
+                
+            loss = vehicle_loss + pedestrian_loss
             
             self.optim.zero_grad()
             loss.backward()
@@ -154,11 +159,28 @@ class WTSSolver(BaseSolver):
         return metrics
     
     @torch.no_grad()
+    def generate_samples(self, feat, tgt_type, max_output_tokens):
+        return self.model.generate(
+            feats=feat,
+            tgt_type=tgt_type,
+            use_nucleus_sampling=self.val_cfg.NUM_BEAMS == 0,
+            num_beams=self.val_cfg.NUM_BEAMS,
+            max_length=max_output_tokens,
+            min_length=1,
+            top_p=self.val_cfg.TOP_P if self.val_cfg.NUM_BEAMS == 0 else 1.0,
+            repetition_penalty=self.val_cfg.REPETITION_PENALTY,
+            length_penalty=self.val_cfg.LENGTH_PENALTY,
+            num_captions=1,
+            temperature=self.val_cfg.TEMPERATURE,
+        )
+    
+    @torch.no_grad()
     def do_valid(self):
         self.logger.info('-' * 80)
         self.logger.info(f'Starting {self.current_stage} stage...')
         loader = self.val_loader
         all_metrics = {}
+        loader.dataset.reset_counter()
         
         while loader.dataset.next_dataset():
             num_samples = len(loader)
@@ -171,30 +193,35 @@ class WTSSolver(BaseSolver):
             for idx, batch in tqdm(enumerate(lp), leave=False, total=num_samples, 
                                    desc=f"Epoch {self.epoch}/{self.max_epoch}"):
                 feat = batch["feat"].to(self.device)
-                label_tokens = batch["output_tokens"].to(self.device)
-                raw_texts = batch["output_text"]
+                vehicle_tokens = batch["vehicle_tokens"].to(self.device)
+                pedestrian_tokens = batch["pedestrian_tokens"].to(self.device)
+                vehicle_text = batch["vehicle_text"]
+                pedestrian_text = batch["pedestrian_text"]
                 
-                output_text = self.model.generate(
-                    feats=feat,
-                    use_nucleus_sampling=self.val_cfg.NUM_BEAMS == 0,
-                    num_beams=self.val_cfg.NUM_BEAMS,
-                    max_length=loader.dataset.max_output_tokens,
-                    min_length=1,
-                    top_p=self.val_cfg.TOP_P if self.val_cfg.NUM_BEAMS == 0 else 1.0,
-                    repetition_penalty=self.val_cfg.REPETITION_PENALTY,
-                    length_penalty=self.val_cfg.LENGTH_PENALTY,
-                    num_captions=1,
-                    temperature=self.val_cfg.TEMPERATURE,
+                pred_vehicle_text = self.generate_samples(
+                    feat, "vehicle", loader.dataset.max_output_tokens
                 )
-                loss = self.model(feat, label_tokens)
+                pred_pedestrian_text = self.generate_samples(
+                    feat, "pedestrian", loader.dataset.max_output_tokens
+                )
+                vehicle_loss = self.model(feat, vehicle_tokens, "vehicle")
+                pedestrian_loss = self.model(feat, pedestrian_tokens, "pedestrian")
+                loss = vehicle_loss + pedestrian_loss
                 
-                ret_metrics = batch_evaluate(output_text, raw_texts)
-                ret_metrics = {
-                    f"{loader.dataset.curr_ds_name}/{k}": v for k, v in ret_metrics.items()
+                vehicle_metrics = batch_evaluate_scenario(pred_vehicle_text, vehicle_text)
+                vehicle_metrics = {
+                    f"{loader.dataset.curr_ds_name}/vehicle_out/{k}": v 
+                    for k, v in vehicle_metrics.items()
+                }
+                pedestrian_metrics = batch_evaluate_scenario(pred_pedestrian_text, pedestrian_text)
+                pedestrian_metrics = {
+                    f"{loader.dataset.curr_ds_name}/pedestrian_out/{k}": v 
+                    for k, v in pedestrian_metrics.items()
                 }
                 
                 metrics = average(
-                    {f"{loader.dataset.curr_ds_name}/loss": loss, **ret_metrics}
+                    {f"{loader.dataset.curr_ds_name}/loss": loss, 
+                     **vehicle_metrics, **pedestrian_metrics}
                 )
                 all_metrics = all_metrics | metrics
                 lp.update(**metrics)
@@ -202,14 +229,12 @@ class WTSSolver(BaseSolver):
                 if idx == 0:
                     self.log_text(
                         self.current_stage, 
-                        [f"{loader.dataset.curr_ds_name}_generated",
-                         f"{loader.dataset.curr_ds_name}_groundtruth"],
-                        [output_text[0], raw_texts[0]],
+                        [f"vehicle_pred",
+                         f"vehicle_gt",
+                         f"pedestrian_pred",
+                         f"pedestrian_gt"],
+                        [pred_vehicle_text[0], vehicle_text[0],
+                         pred_pedestrian_text[0], pedestrian_text[0]],
                     )
-                    # self.log_text(
-                    #     self.current_stage, 
-                    #     f"{loader.dataset.curr_ds_name}_groundtruth",
-                    #     raw_texts[0],
-                    # )
 
         return all_metrics

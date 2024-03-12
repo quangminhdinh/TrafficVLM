@@ -20,7 +20,8 @@ class WTSValDataset(BaseDataset):
                      tokenizer,
                      feature_branches=["mix"], 
                      random_pad_time=False,
-                     return_raw_text=True)
+                     return_raw_text=True,
+                     augment=False)
     
     self.cutoff_ds = None
     
@@ -38,9 +39,7 @@ class WTSValDataset(BaseDataset):
         self.all_sub_ds.append(key)
         self._prune_branch(key)
     
-    self.curr_ds_idx = -1
-    self.curr_ds = None
-    self.curr_ds_name = None
+    self.reset_counter()
   
   def _prune_branch(self, key):
     name, branch = key
@@ -68,6 +67,11 @@ class WTSValDataset(BaseDataset):
     self.curr_ds_name = f"{name}_{branch}"
     print(f"Evaluating {name} dataset, {branch} branch...")
     return True
+  
+  def reset_counter(self):
+    self.curr_ds_idx = -1
+    self.curr_ds = None
+    self.curr_ds_name = None
   
   def _get_scenario(self, idx):
     assert self.curr_ds is not None
@@ -105,27 +109,39 @@ class WTSTestDataset(WTSValDataset):
 def wts_base_collate_fn(batch):
   bs = len(batch)
   feat = torch.stack([batch[i]["feat"] for i in range(bs)])
-  # overhead = [batch[i]["overhead"] for i in range(bs)]
   
-  output_tokens = [batch[i]["output_tokens"] for i in range(bs)]
-  max_output_len = max(len(x) for x in output_tokens)
+  vehicle_tokens = [batch[i]["vehicle_tokens"] for i in range(bs)]
+  max_vehicle_len = max(len(x) for x in vehicle_tokens)
   for i in range(bs):
-    if len(output_tokens[i]) < max_output_len:
-      output_tokens[i] = torch.cat([output_tokens[i], 
-                                    torch.zeros(max_output_len - len(output_tokens[i])).long()
+    if len(vehicle_tokens[i]) < max_vehicle_len:
+      vehicle_tokens[i] = torch.cat([vehicle_tokens[i], 
+                                    torch.zeros(max_vehicle_len - len(vehicle_tokens[i])).long()
                                     ], 0)
-  output_tokens = torch.stack(output_tokens)
+  vehicle_tokens = torch.stack(vehicle_tokens)
   
-  if "output_text" in batch[0]:
-    output_text = [batch[i]["output_text"] for i in range(bs)]
+  pedestrian_tokens = [batch[i]["pedestrian_tokens"] for i in range(bs)]
+  max_pedestrian_len = max(len(x) for x in pedestrian_tokens)
+  for i in range(bs):
+    if len(pedestrian_tokens[i]) < max_pedestrian_len:
+      pedestrian_tokens[i] = torch.cat([pedestrian_tokens[i], 
+                                    torch.zeros(max_pedestrian_len - len(pedestrian_tokens[i])).long()
+                                    ], 0)
+  pedestrian_tokens = torch.stack(pedestrian_tokens)
+  
+  if "vehicle_text" in batch[0]:
+    vehicle_text = [batch[i]["vehicle_text"] for i in range(bs)]
+    pedestrian_text = [batch[i]["pedestrian_text"] for i in range(bs)]
     
     return {
       "feat": feat,
-      "output_tokens": output_tokens,
-      "output_text": output_text,
+      "vehicle_tokens": vehicle_tokens,
+      "pedestrian_tokens": pedestrian_tokens,
+      "vehicle_text": vehicle_text,
+      "pedestrian_text": pedestrian_text,
     }
   
   return {
     "feat": feat,
-    "output_tokens": output_tokens
+    "vehicle_tokens": vehicle_tokens,
+    "pedestrian_tokens": pedestrian_tokens
   }

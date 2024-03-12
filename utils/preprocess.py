@@ -19,12 +19,12 @@ class BackTransAug:
 
 class Augmentor:
   
-  def __init__(self, cfg) -> None:
+  def __init__(self, cfg, nlp_augs=[]) -> None:
     self.ALL_NLP_AUGS = ["backtrans"]
 
     self.nlp_augs = []
     self.nlp_prob = cfg.NLP_PROB
-    for nlp_aug_name in cfg.NLP_AUGS:
+    for nlp_aug_name in nlp_augs:
       self._add_nlp_aug(nlp_aug_name)
     print(f"Using {len(self.nlp_augs)} nlp augmentors in total: "
           f"{', '.join(self.nlp_augs)}.")
@@ -43,9 +43,9 @@ class Augmentor:
     aug = np.random.choice(self.nlp_augs)
     return aug.run(text)
       
-  def apply_nlp_long_sentence(self, text):
+  def apply_nlp_long_sentence(self, text: str):
     if len(self.nlp_augs) == 0:
-      return text
+      return simple_text_preprocess(text)
     processed = self.apply_nlp_multi(text.split('.'))
     processed = [simple_text_preprocess(txt) for txt in processed]
     return " ".join(processed)
