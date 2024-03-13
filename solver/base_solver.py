@@ -12,6 +12,7 @@ import logging
 from pathlib import Path
 import time
 import typing as tp
+import os
 
 import torch
 
@@ -41,13 +42,13 @@ class BaseSolver:
         )
         
         self.load_from_epoch = cfg.LOAD_FROM_EPOCH
+        self.load_from_path = cfg.LOAD_FROM_PATH
         self.save_interval = self.train_cfg.SAVE_INTERVAL
 
         self._current_stage: tp.Optional[str] = None
         self._current_formatter: tp.Optional[Formatter] = None
         self._start_epoch()
         self.history: tp.List[tp.Dict[str, tp.Any]] = []
-        self.checkpoints_list: tp.Dict[str, str] = {}
         self.register_stateful('history', 'checkpoints_list')
         
         self.max_trial_nums = cfg.FAULT_TOLERANCE
@@ -57,22 +58,16 @@ class BaseSolver:
         self._pending_metrics: tp.Dict[str, tp.Any] = {}
         
     @property
-    def load_path(self) -> tp.Optional[str]:
-        key = str(self.load_from_epoch)
-        if key in self.checkpoints_list:
-            return self.checkpoints_list[key]
-        
-    @property
-    def checkpoint_metrics_repr(self) -> tp.Optional[str]:
-        raise NotImplementedError()
+    def load_path(self) -> tp.Optional[Path]:
+        if self.load_from_epoch < 0:
+            return None if self.load_from_path is None else Path(self.load_from_path)
+        path = self.folder / f'epoch_{self.load_from_epoch}.th'
+        assert os.path.isfile(path)
+        return path
 
     @property
     def checkpoint_path(self) -> Path:
-        if self.checkpoint_metrics_repr is not None:
-            path = self.folder / f'epoch_{self.epoch - 1}_{self.checkpoint_metrics_repr}.th'
-        else:
-            path = self.folder / f'epoch_{self.epoch - 1}.th'
-        self.checkpoints_list[str(self.epoch - 1)] = str(path)
+        path = self.folder / f'epoch_{self.epoch - 1}.th'
         return path
 
     @property
@@ -171,8 +166,7 @@ class BaseSolver:
         if self.load_path is None:
             return False
         load_path = Path(self.load_path)
-        if not load_path.exists():
-            return False
+        assert load_path.exists()
         state = torch.load(load_path, 'cpu')
         self.load_state_dict(state)
         # TODO: Move to StandardSolver when it exists

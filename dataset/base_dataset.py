@@ -338,6 +338,7 @@ class BaseDataset(Dataset):
   def _get_frames(self, view, total_samples):
     total_samples -= 1
     phases = view["event_phase"]
+    view["label_order"] = [p["labels"][0] for p in phases]
     
     for phase in phases:
       phase["start_time"] = float(phase["start_time"])

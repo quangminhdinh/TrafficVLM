@@ -89,7 +89,7 @@ class WTSTestDataset(WTSValDataset):
     
   # TODO
   def __getitem__(self, idx):
-    ds_cfg, scenario = self._get_scenario(idx)
+    _, scenario = self._get_scenario(idx)
     
     feat_dict = self._load_features(idx)
     if "vehicle" in feat_dict and "overhead" in feat_dict:
@@ -103,7 +103,21 @@ class WTSTestDataset(WTSValDataset):
 
     return {
       "feat": feat,
+      "scenario": scenario,
+      "label_order": [int(l) for l in view["label_order"]],
     }
+
+
+def wts_test_collate_fn(batch):
+  bs = len(batch)
+  feat = torch.stack([batch[i]["feat"] for i in range(bs)])
+  scenario = [batch[i]["scenario"] for i in range(bs)]
+  label_order = [batch[i]["label_order"] for i in range(bs)]
+  return {
+    "feat": feat,
+    "scenario": scenario,
+    "label_order": label_order,
+  }
 
 
 def wts_base_collate_fn(batch):

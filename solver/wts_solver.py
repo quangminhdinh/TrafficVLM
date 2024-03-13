@@ -1,5 +1,4 @@
 import torch
-import typing as tp
 import math
 import sys
 from torchinfo import summary
@@ -17,12 +16,11 @@ class WTSSolver(BaseSolver):
     def __init__(self, cfg,
                  experiment_name,
                  signature,
-                 batch_size,
                  local_dir,
                  model, 
-                 train_loader,
-                 val_loader,
-                 optim,
+                 train_loader=None,
+                 val_loader=None,
+                 optim=None,
                  is_eval=False,
                  hparams=None,
                  device: torch.device = torch.device("cuda")):
@@ -31,7 +29,6 @@ class WTSSolver(BaseSolver):
                 
         self.device = device
         self.model = model
-        self.batch_size = batch_size
         
         self.train_loader = train_loader
         self.val_loader = val_loader
@@ -41,6 +38,7 @@ class WTSSolver(BaseSolver):
           checkpoint = torch.load(self.model.pretrained_ckpt, map_location="cpu")
           self.model.load_pretrained(checkpoint["model"])
           if "optimizer" in checkpoint:
+              assert self.optim is not None
               self.optim.load_state_dict(checkpoint["optimizer"])
           print("\nPretrained Vid2Seq checkpoint has beed loaded!")
           
@@ -48,7 +46,7 @@ class WTSSolver(BaseSolver):
 
         self.register_stateful('model', 'optim')
         
-        if cfg.LOG_TO_WANDB:
+        if cfg.LOG_TO_WANDB and not is_eval:
             self.init_wandb(
                 log_folder=local_dir,
                 project="AIC Track 2",
@@ -64,22 +62,7 @@ class WTSSolver(BaseSolver):
         
         self.val_metrics_list = list(probe_metrics().keys())
         self.val_metrics_list.append('loss')
-        
-    @property
-    def checkpoint_metrics_repr(self) -> tp.Optional[str]:
-        if len(self.checkpoint_metrics) == 0:
-            return
-        prev_metrics = self.history[-1]
-        if "valid" not in prev_metrics:
-            return
-        
-        valid_metrics = prev_metrics["valid"]
-        metrics_repr = [
-            f"{'_'.join(k.split('/'))}_{str('{:.3f}'.format(valid_metrics[k]))}" 
-            for k in self.checkpoint_metrics if k in valid_metrics
-        ]
-        # assert len(metrics_repr) == len(self.checkpoint_metrics)
-        return "_".join(metrics_repr)
+        self.val_samples_history = []
 
     def run(self):
         self.logger.info('Log dir: %s', self.folder)
@@ -93,6 +76,7 @@ class WTSSolver(BaseSolver):
             self.commit()
 
     def get_formatter(self, stage_name: str):
+        assert self.val_loader is not None
         if stage_name == "train":
             return Formatter({
                 'loss': '.5f',
@@ -111,6 +95,8 @@ class WTSSolver(BaseSolver):
         raise NotImplementedError()
 
     def do_train(self):
+        assert self.train_loader is not None and \
+            self.optim is not None
         self.logger.info('-' * 80)
         self.logger.info(f'Starting {self.current_stage} stage...')
         loader = self.train_loader
@@ -176,6 +162,7 @@ class WTSSolver(BaseSolver):
     
     @torch.no_grad()
     def do_valid(self):
+        assert self.val_loader is not None
         self.logger.info('-' * 80)
         self.logger.info(f'Starting {self.current_stage} stage...')
         loader = self.val_loader
@@ -227,14 +214,110 @@ class WTSSolver(BaseSolver):
                 lp.update(**metrics)
                 
                 if idx == 0:
+                    self.val_samples_history.append(
+                        [str(self.epoch), pred_vehicle_text[0], vehicle_text[0],
+                         pred_pedestrian_text[0], pedestrian_text[0]]
+                    )
                     self.log_text(
                         self.current_stage, 
-                        [f"vehicle_pred",
-                         f"vehicle_gt",
-                         f"pedestrian_pred",
-                         f"pedestrian_gt"],
-                        [pred_vehicle_text[0], vehicle_text[0],
-                         pred_pedestrian_text[0], pedestrian_text[0]],
+                        ["epoch",
+                         "vehicle_pred",
+                         "vehicle_gt",
+                         "pedestrian_pred",
+                         "pedestrian_gt"],
+                        self.val_samples_history,
                     )
 
         return all_metrics
+    
+    @torch.no_grad()
+    def generate_to_len(self, feat, max_output_tokens, tgt_type, scenarios, num_phases, max_trials=5):
+        texts = self.generate_samples(feat, tgt_type, max_output_tokens)
+        parsed_texts = batch_parse(texts)
+        assert len(scenarios) == len(parsed_texts)
+        
+        invalid_indices = []
+        results = {}
+        for idx, scenario in enumerate(scenarios):
+            scenario_texts = parsed_texts[idx]
+            if len(scenario_texts) < num_phases[idx]:
+                if max_trials == 0:
+                    print(f"MAX TRIALS REACHED! Duplicating last text for {scenario}'s {tgt_type}...")
+                    dup = scenario_texts[-1]
+                    for _ in range(num_phases[idx] - len(scenario_texts)):
+                        scenario_texts.append(dup)
+                else:
+                    invalid_indices.append(idx)
+                    continue
+            results[scenario] = scenario_texts
+        if len(invalid_indices) == 0:
+            return results
+        return self.generate_to_len(
+            torch.index_select(feat, 0, torch.tensor(invalid_indices)),
+            max_output_tokens,
+            tgt_type,
+            [scenarios[i] for i in invalid_indices],
+            [num_phases[i] for i in invalid_indices],
+            max_trials - 1
+        ) | results
+        
+    @torch.no_grad()
+    def generate_to_len_once(self, feat, max_output_tokens, tgt_type, scenarios, num_phases):
+        texts = self.generate_samples(feat, tgt_type, max_output_tokens)
+        parsed_texts = batch_parse(texts)
+        assert len(scenarios) == len(parsed_texts)
+        
+        results = {}
+        for idx, scenario in enumerate(scenarios):
+            scenario_texts = parsed_texts[idx]
+            if len(scenario_texts) < num_phases[idx]:
+                print(f"MAX TRIALS REACHED! Duplicating last text for {scenario}'s {tgt_type}...")
+                dup = scenario_texts[-1]
+                for _ in range(num_phases[idx] - len(scenario_texts)):
+                    scenario_texts.append(dup)
+            results[scenario] = scenario_texts
+        return results
+    
+    @torch.no_grad()
+    def do_test(self, loader):
+        assert self.load_path is not None
+        self.restore()
+        
+        self.logger.info('-' * 80)
+        self.logger.info(f'Start evaluating {self.model.__class__.__name__} at epoch {str(self.load_from_epoch)}...')
+        loader.dataset.reset_counter()
+        
+        return_dict = {}
+        while loader.dataset.next_dataset():
+            num_samples = len(loader)
+            lp = self.log_progress(
+                self.current_stage, loader, total=num_samples, updates=self.log_updates, use_tqdm = True
+            )
+            self.model.eval()
+
+            for _, batch in tqdm(enumerate(lp), leave=False, total=num_samples, 
+                                   desc=loader.dataset.curr_ds_name):
+                feat = batch["feat"].to(self.device)
+                scenarios = batch["scenario"]
+                label_order = batch["label_order"]
+                num_phases = [len(label) for label in label_order]
+                
+                vehicle_dict = self.generate_to_len_once(
+                    feat, loader.dataset.max_output_tokens, "vehicle", scenarios, num_phases
+                )
+                pedestrian_dict = self.generate_to_len_once(
+                    feat, loader.dataset.max_output_tokens, "pedestrian", scenarios, num_phases
+                )
+                for scenario_idx, scenario in enumerate(scenarios):
+                    assert scenario not in return_dict
+                    vehicle_txts = vehicle_dict[scenario]
+                    pedestrian_txts = pedestrian_dict[scenario]
+                    return_dict[scenario] = [
+                        {
+                            "labels": [str(i)],
+                            "caption_pedestrian": pedestrian_txts[i],
+                            "caption_vehicle": vehicle_txts[i],
+                        } for i in label_order[scenario_idx]
+                    ]
+
+        return return_dict
