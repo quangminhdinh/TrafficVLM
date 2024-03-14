@@ -302,4 +302,4 @@ class ResultLogger:
                 logger.log_text(stage, key, text, step, **kwargs)
             else:
                 for idx in range(len(key)):
-                    logger.log_text(stage, key[idx], text[idx], step, **kwargs)
+                    logger.log_text(stage, key[idx], text[-1][idx], step, **kwargs)

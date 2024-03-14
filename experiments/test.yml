@@ -1,7 +1,13 @@
 SOLVER:
   TRAIN:
-    BATCH_SIZE: 7
+    BATCH_SIZE: 1
+    SAVE_INTERVAL: 1
   VAL:
     VAL_INTERVAL: 1
-  LOG_TO_WANDB: True
+  LOG_TO_WANDB: False
   FAULT_TOLERANCE: 0
+
+DATA:
+  TRAIN_DATASETS: [
+    { "name": "wts_train_main", "ratio": -1 },
+  ]

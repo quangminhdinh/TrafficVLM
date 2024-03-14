@@ -49,7 +49,8 @@ class BaseSolver:
         self._current_formatter: tp.Optional[Formatter] = None
         self._start_epoch()
         self.history: tp.List[tp.Dict[str, tp.Any]] = []
-        self.register_stateful('history', 'checkpoints_list')
+        self.checkpoints_list = []
+        self.register_stateful('history')
         
         self.max_trial_nums = cfg.FAULT_TOLERANCE
         self._retry_count = 0

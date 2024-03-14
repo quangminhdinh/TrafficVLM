@@ -9,7 +9,11 @@ from .optimizer import adjust_learning_rate
 from .formatter import Formatter
 from .utils import averager
 
-from benchmark import batch_evaluate_scenario, probe_metrics
+from benchmark import (
+    batch_evaluate_concurrent, 
+    batch_evaluate_scenario,
+    probe_metrics,
+)
 
 class WTSSolver(BaseSolver):
   
@@ -196,18 +200,22 @@ class WTSSolver(BaseSolver):
                 loss = vehicle_loss + pedestrian_loss
                 
                 vehicle_metrics = batch_evaluate_scenario(pred_vehicle_text, vehicle_text)
+                vehicle_total = vehicle_metrics["TOTAL"]
                 vehicle_metrics = {
                     f"{loader.dataset.curr_ds_name}/vehicle_out/{k}": v 
                     for k, v in vehicle_metrics.items()
                 }
                 pedestrian_metrics = batch_evaluate_scenario(pred_pedestrian_text, pedestrian_text)
+                pedestrian_total = pedestrian_metrics["TOTAL"]
                 pedestrian_metrics = {
                     f"{loader.dataset.curr_ds_name}/pedestrian_out/{k}": v 
                     for k, v in pedestrian_metrics.items()
                 }
+                fin_total = (vehicle_total + pedestrian_total) / 2
                 
                 metrics = average(
                     {f"{loader.dataset.curr_ds_name}/loss": loss, 
+                     f"{loader.dataset.curr_ds_name}/TOTAL": fin_total, 
                      **vehicle_metrics, **pedestrian_metrics}
                 )
                 all_metrics = all_metrics | metrics
@@ -230,94 +238,94 @@ class WTSSolver(BaseSolver):
 
         return all_metrics
     
-    @torch.no_grad()
-    def generate_to_len(self, feat, max_output_tokens, tgt_type, scenarios, num_phases, max_trials=5):
-        texts = self.generate_samples(feat, tgt_type, max_output_tokens)
-        parsed_texts = batch_parse(texts)
-        assert len(scenarios) == len(parsed_texts)
+    # @torch.no_grad()
+    # def generate_to_len(self, feat, max_output_tokens, tgt_type, scenarios, num_phases, max_trials=5):
+    #     texts = self.generate_samples(feat, tgt_type, max_output_tokens)
+    #     parsed_texts = batch_parse(texts)
+    #     assert len(scenarios) == len(parsed_texts)
         
-        invalid_indices = []
-        results = {}
-        for idx, scenario in enumerate(scenarios):
-            scenario_texts = parsed_texts[idx]
-            if len(scenario_texts) < num_phases[idx]:
-                if max_trials == 0:
-                    print(f"MAX TRIALS REACHED! Duplicating last text for {scenario}'s {tgt_type}...")
-                    dup = scenario_texts[-1]
-                    for _ in range(num_phases[idx] - len(scenario_texts)):
-                        scenario_texts.append(dup)
-                else:
-                    invalid_indices.append(idx)
-                    continue
-            results[scenario] = scenario_texts
-        if len(invalid_indices) == 0:
-            return results
-        return self.generate_to_len(
-            torch.index_select(feat, 0, torch.tensor(invalid_indices)),
-            max_output_tokens,
-            tgt_type,
-            [scenarios[i] for i in invalid_indices],
-            [num_phases[i] for i in invalid_indices],
-            max_trials - 1
-        ) | results
+    #     invalid_indices = []
+    #     results = {}
+    #     for idx, scenario in enumerate(scenarios):
+    #         scenario_texts = parsed_texts[idx]
+    #         if len(scenario_texts) < num_phases[idx]:
+    #             if max_trials == 0:
+    #                 print(f"MAX TRIALS REACHED! Duplicating last text for {scenario}'s {tgt_type}...")
+    #                 dup = scenario_texts[-1]
+    #                 for _ in range(num_phases[idx] - len(scenario_texts)):
+    #                     scenario_texts.append(dup)
+    #             else:
+    #                 invalid_indices.append(idx)
+    #                 continue
+    #         results[scenario] = scenario_texts
+    #     if len(invalid_indices) == 0:
+    #         return results
+    #     return self.generate_to_len(
+    #         torch.index_select(feat, 0, torch.tensor(invalid_indices)),
+    #         max_output_tokens,
+    #         tgt_type,
+    #         [scenarios[i] for i in invalid_indices],
+    #         [num_phases[i] for i in invalid_indices],
+    #         max_trials - 1
+    #     ) | results
         
-    @torch.no_grad()
-    def generate_to_len_once(self, feat, max_output_tokens, tgt_type, scenarios, num_phases):
-        texts = self.generate_samples(feat, tgt_type, max_output_tokens)
-        parsed_texts = batch_parse(texts)
-        assert len(scenarios) == len(parsed_texts)
+    # @torch.no_grad()
+    # def generate_to_len_once(self, feat, max_output_tokens, tgt_type, scenarios, num_phases):
+    #     texts = self.generate_samples(feat, tgt_type, max_output_tokens)
+    #     parsed_texts = batch_parse(texts)
+    #     assert len(scenarios) == len(parsed_texts)
         
-        results = {}
-        for idx, scenario in enumerate(scenarios):
-            scenario_texts = parsed_texts[idx]
-            if len(scenario_texts) < num_phases[idx]:
-                print(f"MAX TRIALS REACHED! Duplicating last text for {scenario}'s {tgt_type}...")
-                dup = scenario_texts[-1]
-                for _ in range(num_phases[idx] - len(scenario_texts)):
-                    scenario_texts.append(dup)
-            results[scenario] = scenario_texts
-        return results
+    #     results = {}
+    #     for idx, scenario in enumerate(scenarios):
+    #         scenario_texts = parsed_texts[idx]
+    #         if len(scenario_texts) < num_phases[idx]:
+    #             print(f"MAX TRIALS REACHED! Duplicating last text for {scenario}'s {tgt_type}...")
+    #             dup = scenario_texts[-1]
+    #             for _ in range(num_phases[idx] - len(scenario_texts)):
+    #                 scenario_texts.append(dup)
+    #         results[scenario] = scenario_texts
+    #     return results
     
-    @torch.no_grad()
-    def do_test(self, loader):
-        assert self.load_path is not None
-        self.restore()
+    # @torch.no_grad()
+    # def do_test(self, loader):
+    #     assert self.load_path is not None
+    #     self.restore()
         
-        self.logger.info('-' * 80)
-        self.logger.info(f'Start evaluating {self.model.__class__.__name__} at epoch {str(self.load_from_epoch)}...')
-        loader.dataset.reset_counter()
+    #     self.logger.info('-' * 80)
+    #     self.logger.info(f'Start evaluating {self.model.__class__.__name__} at epoch {str(self.load_from_epoch)}...')
+    #     loader.dataset.reset_counter()
         
-        return_dict = {}
-        while loader.dataset.next_dataset():
-            num_samples = len(loader)
-            lp = self.log_progress(
-                self.current_stage, loader, total=num_samples, updates=self.log_updates, use_tqdm = True
-            )
-            self.model.eval()
+    #     return_dict = {}
+    #     while loader.dataset.next_dataset():
+    #         num_samples = len(loader)
+    #         lp = self.log_progress(
+    #             self.current_stage, loader, total=num_samples, updates=self.log_updates, use_tqdm = True
+    #         )
+    #         self.model.eval()
 
-            for _, batch in tqdm(enumerate(lp), leave=False, total=num_samples, 
-                                   desc=loader.dataset.curr_ds_name):
-                feat = batch["feat"].to(self.device)
-                scenarios = batch["scenario"]
-                label_order = batch["label_order"]
-                num_phases = [len(label) for label in label_order]
+    #         for _, batch in tqdm(enumerate(lp), leave=False, total=num_samples, 
+    #                                desc=loader.dataset.curr_ds_name):
+    #             feat = batch["feat"].to(self.device)
+    #             scenarios = batch["scenario"]
+    #             label_order = batch["label_order"]
+    #             num_phases = [len(label) for label in label_order]
                 
-                vehicle_dict = self.generate_to_len_once(
-                    feat, loader.dataset.max_output_tokens, "vehicle", scenarios, num_phases
-                )
-                pedestrian_dict = self.generate_to_len_once(
-                    feat, loader.dataset.max_output_tokens, "pedestrian", scenarios, num_phases
-                )
-                for scenario_idx, scenario in enumerate(scenarios):
-                    assert scenario not in return_dict
-                    vehicle_txts = vehicle_dict[scenario]
-                    pedestrian_txts = pedestrian_dict[scenario]
-                    return_dict[scenario] = [
-                        {
-                            "labels": [str(i)],
-                            "caption_pedestrian": pedestrian_txts[i],
-                            "caption_vehicle": vehicle_txts[i],
-                        } for i in label_order[scenario_idx]
-                    ]
+    #             vehicle_dict = self.generate_to_len_once(
+    #                 feat, loader.dataset.max_output_tokens, "vehicle", scenarios, num_phases
+    #             )
+    #             pedestrian_dict = self.generate_to_len_once(
+    #                 feat, loader.dataset.max_output_tokens, "pedestrian", scenarios, num_phases
+    #             )
+    #             for scenario_idx, scenario in enumerate(scenarios):
+    #                 assert scenario not in return_dict
+    #                 vehicle_txts = vehicle_dict[scenario]
+    #                 pedestrian_txts = pedestrian_dict[scenario]
+    #                 return_dict[scenario] = [
+    #                     {
+    #                         "labels": [str(i)],
+    #                         "caption_pedestrian": pedestrian_txts[i],
+    #                         "caption_vehicle": vehicle_txts[i],
+    #                     } for i in label_order[scenario_idx]
+    #                 ]
 
-        return return_dict
+    #     return return_dict

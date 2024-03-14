@@ -9,7 +9,10 @@ from .utils import (
     convert_desc_to_dict,
     convert_dict_to_desc_list
 )
+from concurrent.futures import ProcessPoolExecutor
+from multiprocessing import Pool
 from typing import List, Dict
+import os
 
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -135,6 +138,44 @@ def batch_evaluate_scenario(pred_all_sentences, gt_all_sentences) -> Dict[str, f
             pred, gt, 1, 0
         ) for pred, gt in zip(pred_all_sentences, gt_all_sentences)
     ]
+    
+    raw_metrics_dict = {}
+    for k in raw_metrics[0].keys():
+        raw_metrics_dict[f"{k.upper()}"] = [met[k] for met in raw_metrics]
+    
+    raw_total = 0
+    for k, v in raw_metrics_dict.items():
+        met = sum(v) / len(v)
+        metrics_all_category_means[k] = met
+        
+        if k != "cider".upper():
+            raw_total += met * 10
+        else:
+            raw_total += met * 100
+            
+    metrics_all_category_means["TOTAL"] = raw_total / 4
+    return metrics_all_category_means
+
+
+def compute_metrics_single_wrapper(pair):
+    pred, gt = pair
+    return compute_metrics_single(
+        pred, gt, 1, 0
+    )
+
+
+def batch_evaluate_concurrent(pred_all_sentences, gt_all_sentences) -> Dict[str, float]:
+    metrics_all_category_means = {}
+        
+    # with ProcessPoolExecutor(max_workers=3) as exe:
+    #     result = exe.map(compute_metrics_single_wrapper,
+    #                      zip(pred_all_sentences, gt_all_sentences))
+    #     raw_metrics = list(result)
+    pool = Pool(10)
+    raw_metrics = list(pool.map(
+        compute_metrics_single_wrapper,
+        zip(pred_all_sentences, gt_all_sentences)
+    ))
     
     raw_metrics_dict = {}
     for k in raw_metrics[0].keys():
