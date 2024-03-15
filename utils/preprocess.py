@@ -27,7 +27,7 @@ class Augmentor:
     for nlp_aug_name in nlp_augs:
       self._add_nlp_aug(nlp_aug_name)
     print(f"Using {len(self.nlp_augs)} nlp augmentors in total: "
-          f"{', '.join(self.nlp_augs)}.")
+          f"{', '.join(self.nlp_augs.__class__.__name__)}.")
     
   def _add_nlp_aug(self, name):
     if name not in self.ALL_NLP_AUGS:
