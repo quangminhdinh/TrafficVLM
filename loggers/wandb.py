@@ -171,7 +171,7 @@ class WandbLogger(ExperimentLogger):
             }
         else:
             metrics = {
-                key[1]: 
+                "samples": 
                     wandb.Table(columns=[*key], data=text, **kwargs)
             }
         metrics = _add_prefix(metrics, prefix, self.group_separator)

@@ -10,6 +10,9 @@ from .cider.cider import Cider
 from nltk.tokenize import TreebankWordTokenizer
 
 
+id_text_pattern = f"<time=(\d+)> <time=(\d+)> (.+?)(?=<time=|\Z)" # type: ignore
+
+
 try:
     nltk.data.find('tokenizers/punkt')
 except:
@@ -132,6 +135,16 @@ def convert_to_dict(segment_list):
         }
 
     return segment_dict
+
+
+def single_parse(desc: str):
+    segments = re.findall(id_text_pattern, desc)
+    segments_list = [segment[2] for segment in segments]
+    return segments_list
+
+
+def batch_parse(desc_list):
+    return [single_parse(desc) for desc in desc_list]
 
 
 def convert_desc_to_dict(desc: str):

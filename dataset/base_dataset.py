@@ -10,6 +10,8 @@ from utils import (
   sample_files,
   simple_text_preprocess,
   sample_every,
+  phase_sentinel_text_mask,
+  phase_sentinel_vid_mask,
   Augmentor
 )
 
@@ -22,7 +24,9 @@ class BaseDataset(Dataset):
                feature_branches=["vehicle"],
                random_pad_time=True,
                return_raw_text=False,
-               augment=True):
+               augment=True,
+               denoising=False,
+               phase_noise_density=0.5):
     
     super().__init__()
     
@@ -47,6 +51,12 @@ class BaseDataset(Dataset):
     self.num_bins = cfg.NUM_BINS
     self.num_text_tokens = len(tokenizer) - self.num_bins
     
+    self.denoising = denoising
+    self.phase_noise_density = phase_noise_density
+    if self.denoising:
+      print("Phase noises will be added for denoising training with density",
+            self.phase_noise_density)
+    
     self.feature_branches = feature_branches
     if self.feature_branches is not None:
       print(f"Using features: {', '.join(self.feature_branches)}.")
@@ -62,6 +72,15 @@ class BaseDataset(Dataset):
     for idx, ds_cfg in enumerate(self.dataset_path_cfgs):
       ds_cfg["ratio"] = dataset_ratios[idx]["ratio"]
       scenarios = get_all_top(ds_cfg["features"])
+      if ds_cfg["bbox_vehicle"] is None:
+        cap_side = get_all_top(ds_cfg["captions"])
+        if len(cap_side) > len(scenarios):
+          cap_side = [f"{cap.split('_')[0]}.npy" for cap in cap_side]
+          ds_cfg["remain"] = list(set(cap_side) - set(scenarios))
+          ds_cfg["remain"] = [scen[:-4] for scen in ds_cfg["remain"]]
+      if "normal_trimmed" in scenarios:
+        print(f"REMOVING {'normal_trimmed'.upper()} from {ds_cfg['name'].upper()}...")
+        scenarios.remove("normal_trimmed")
       scenarios.sort()
       if ds_cfg["ratio"] > 0:
         ds_cfg["all_scenarios"] = scenarios
@@ -129,10 +148,14 @@ class BaseDataset(Dataset):
         local_dir = os.path.join(ds_cfg["features"], scenario, "vehicle_view")
         if len(os.listdir(local_dir)) == 0:
           usable.remove("vehicle")
+      else:
+        usable.remove("vehicle")
       if "overhead" in self.feature_branches or "mix" in self.feature_branches:
         local_dir = os.path.join(ds_cfg["features"], scenario, "overhead_view")
         if len(os.listdir(local_dir)) == 0:
           usable.remove("overhead")
+      else:
+        usable.remove("overhead")
       if len(usable) == 0:
         broken.append(scenario)
       else:
@@ -205,6 +228,7 @@ class BaseDataset(Dataset):
       selected_frames = self._get_frames(view, len(raw_feats))
       feats = torch.index_select(raw_feats, 0, selected_frames)
       assert len(feats) == len(selected_frames)
+      view["org_feat_len"] = len(feats) if len(feats) < self.max_feats else self.max_feats
       feat_dict["vehicle"] = self._resample_video_features(feats)
       
     if "overhead_view" in feat_dict:
@@ -216,6 +240,7 @@ class BaseDataset(Dataset):
       selected_frames = self._get_frames(view, len(raw_feats))
       feats = torch.index_select(raw_feats, 0, selected_frames)
       assert len(feats) == len(selected_frames)
+      view["org_feat_len"] = len(feats) if len(feats) < self.max_feats else self.max_feats
       feat_dict["overhead"] = self._resample_video_features(feats)
 
     return feat_dict
@@ -303,20 +328,50 @@ class BaseDataset(Dataset):
                           for st, ed in zip(start, end)]
                                        
     vehicle_text = [
-      self.augmentor.apply_nlp_long_sentence(p['caption_vehicle']) for p in phases
+      simple_text_preprocess(p['caption_vehicle']) for p in phases
     ]                   
     vehicle_tokens = self._get_output_tokens(vehicle_text, time_output_tokens)
     pedestrian_text = [
-      self.augmentor.apply_nlp_long_sentence(p['caption_pedestrian']) for p in phases
+      simple_text_preprocess(p['caption_pedestrian']) for p in phases
     ]  
     pedestrian_tokens = self._get_output_tokens(pedestrian_text, time_output_tokens)
     
+    if self.denoising and not self.return_raw_text:
+      num_phases = len(view["label_order"])
+      tb_mask = [
+        np.random.uniform() < self.phase_noise_density for _ in range(num_phases)
+      ]
+      num_mask = sum(tb_mask)
+      if num_mask == 0 or num_mask == num_phases:
+        rv_idx = np.random.randint(num_phases)
+        tb_mask[rv_idx] = not tb_mask[rv_idx]
+      denoise_vehicle_text = phase_sentinel_text_mask(vehicle_text, tb_mask)
+      denoise_vehicle_tokens = self._get_output_tokens(
+        denoise_vehicle_text, time_output_tokens
+      )
+      denoise_pedestrian_text = phase_sentinel_text_mask(pedestrian_text, tb_mask)
+      denoise_pedestrian_tokens = self._get_output_tokens(
+        denoise_pedestrian_text, time_output_tokens
+      )
+      
+      vid_mask = ~np.array(tb_mask)
+      start_frames = [
+        self._get_time_token(st, duration, view["org_feat_len"]) for st in start
+      ]
+      denoising_feat = phase_sentinel_vid_mask(feat, vid_mask, start_frames)
+      assert not torch.all(feat == denoising_feat)
+    
     if not self.return_raw_text:
-      return {
+      ret = {
         "feat": feat,
         "vehicle_tokens": vehicle_tokens,
         "pedestrian_tokens": pedestrian_tokens
       }
+      if self.denoising:
+        ret["denoising_feat"] = denoising_feat
+        ret["denoise_vehicle_tokens"] = denoise_vehicle_tokens
+        ret["denoise_pedestrian_tokens"] = denoise_pedestrian_tokens
+      return ret
     
     time_tokens = [[self._get_time_token(st, duration, self.num_bins),
                     self._get_time_token(ed, duration, self.num_bins)]

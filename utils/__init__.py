@@ -14,3 +14,7 @@ from .preprocess import (
   simple_text_preprocess,
   Augmentor
 )
+from .mask import (
+  phase_sentinel_text_mask,
+  phase_sentinel_vid_mask
+)

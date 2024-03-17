@@ -27,6 +27,8 @@ from solver import (
   setup_logging
 )
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 
 def main(args, cfg):
   torch.cuda.empty_cache()
@@ -40,7 +42,13 @@ def main(args, cfg):
   device = torch.device(cfg.GLOB.DEVICE)
   tokenizer = get_tokenizer(cfg.MODEL.T5_PATH, cfg.DATA.NUM_BINS)
   
-  train_set = WTSTrainDataset(cfg.DATA, tokenizer, cfg.MODEL.FEATURE_BRANCHES)
+  train_set = WTSTrainDataset(
+    cfg.DATA, 
+    tokenizer, 
+    cfg.MODEL.FEATURE_BRANCHES,
+    cfg.SOLVER.TRAIN.DENOISING,
+    cfg.SOLVER.TRAIN.PHASE_NOISE_DENSITY
+  )
   val_set = WTSValDataset(cfg.DATA, tokenizer)
   
   train_sampler = RandomSampler(train_set)

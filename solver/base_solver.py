@@ -8,6 +8,7 @@ Base Solver class. Specific solver should inherit this class.
 Solver takes care of various things, like setting up logging?
 As well as running stages.
 """
+from email.policy import strict
 import logging
 from pathlib import Path
 import time
@@ -31,6 +32,7 @@ class BaseSolver:
         self.train_cfg = cfg.TRAIN
         self.optim_cfg = self.train_cfg.OPTIMIZER
         self.val_cfg = cfg.VAL
+        self.test_cfg = cfg.TEST
         self.signature = signature
         
         self.stateful = StateManager()
@@ -50,7 +52,10 @@ class BaseSolver:
         self._start_epoch()
         self.history: tp.List[tp.Dict[str, tp.Any]] = []
         self.checkpoints_list = []
-        self.register_stateful('history')
+        if experiment_name == "tgt_embed":
+            self.register_stateful('history', 'checkpoints_list')
+        else:
+            self.register_stateful('history')
         
         self.max_trial_nums = cfg.FAULT_TOLERANCE
         self._retry_count = 0

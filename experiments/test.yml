@@ -1,13 +1,18 @@
 SOLVER:
   TRAIN:
+    MAX_EPOCH: 1
     BATCH_SIZE: 1
     SAVE_INTERVAL: 1
+    DENOISING: True
   VAL:
     VAL_INTERVAL: 1
   LOG_TO_WANDB: False
   FAULT_TOLERANCE: 0
 
 DATA:
+  FPS: 2
+  MAX_OUTPUT_TOKENS: 1024
   TRAIN_DATASETS: [
     { "name": "wts_train_main", "ratio": -1 },
   ]
+

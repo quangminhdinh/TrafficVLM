@@ -26,13 +26,13 @@ def get_test_args_parser():
   
   parser.add_argument(
     "-d", "--device",
-    type=str, default="cpu",
+    type=str, default="cuda",
     help="device to be used (i.e. cuda:0 for single gpu)",
   )
   
   parser.add_argument(
     "-b", "--batch",
-    type=int, default=3,
+    type=int, default=7,
     help="batch size to be used for testing",
   )
   

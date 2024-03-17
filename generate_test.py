@@ -25,6 +25,8 @@ from solver import (
   setup_logging,
 )
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 
 def main(args, cfg):
   torch.cuda.empty_cache()
@@ -65,13 +67,16 @@ def main(args, cfg):
   )
   
   results_dict = solver.do_test(test_loader)
+  print("Total samples:", len(results_dict))
   json_object = json.dumps(results_dict, indent=4)
   
   outdir = os.path.join(solver.folder, "test_results")
   if not os.path.exists(outdir):
     os.makedirs(outdir)
     
-  result_path = os.path.join(outdir, f"epoch_{solver.load_from_epoch}.json")
+  result_path = os.path.join(
+    outdir, f"{args.experiment}_epoch_{solver.load_from_epoch}.json"
+  )
   with open(result_path, "w") as outfile:
     outfile.write(json_object)
     
