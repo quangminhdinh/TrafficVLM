@@ -228,13 +228,13 @@ class WTSSolver(BaseSolver):
                 pedestrian_loss = self.model(feat, pedestrian_tokens, "pedestrian")
                 loss = vehicle_loss + pedestrian_loss
                 
-                vehicle_metrics = batch_evaluate_scenario(pred_vehicle_text, vehicle_text)
+                vehicle_metrics = batch_evaluate_concurrent(pred_vehicle_text, vehicle_text)
                 vehicle_total = vehicle_metrics["TOTAL"]
                 vehicle_metrics = {
                     f"{loader.dataset.curr_ds_name}/vehicle_out/{k}": v 
                     for k, v in vehicle_metrics.items()
                 }
-                pedestrian_metrics = batch_evaluate_scenario(pred_pedestrian_text, pedestrian_text)
+                pedestrian_metrics = batch_evaluate_concurrent(pred_pedestrian_text, pedestrian_text)
                 pedestrian_total = pedestrian_metrics["TOTAL"]
                 pedestrian_metrics = {
                     f"{loader.dataset.curr_ds_name}/pedestrian_out/{k}": v 

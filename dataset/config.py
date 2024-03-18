@@ -2,7 +2,7 @@ import os
 
 
 ROOT_PATH = "/home"
-FEATURE_PATH = os.path.join(ROOT_PATH, "data/features")
+FEATURE_PATH = os.path.join(ROOT_PATH, "features")
 ANNOTATION_PATH = os.path.join(ROOT_PATH, "data")
 SELECTED_BBOX = "bbox_annotated"
 
@@ -26,7 +26,7 @@ wts_val_main = {
 wts_train_external = {
   "name": "wts_train_external",
   "features": os.path.join(FEATURE_PATH, "external/BDD_PC_5K/train"),
-  "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_zip/external/BDD_PC_5K/annotations/caption/train"),
+  "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_zip/external/annotations/caption/train"),
   "bbox_pedestrian": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/external/BDD_PC_5K/annotations/bbox_annotated/train"),
   "bbox_vehicle": None
 }
@@ -34,7 +34,7 @@ wts_train_external = {
 wts_val_external = {
   "name": "wts_val_external",
   "features": os.path.join(FEATURE_PATH, "external/BDD_PC_5K/val"),
-  "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_zip/external/BDD_PC_5K/annotations/caption/val"),
+  "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_zip/external/annotations/caption/val"),
   "bbox_pedestrian": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/external/BDD_PC_5K/annotations/bbox_annotated/val"),
   "bbox_vehicle": None
 }
@@ -42,7 +42,7 @@ wts_val_external = {
 wts_test_main = {
   "name": "wts_test_main",
   "features": os.path.join(FEATURE_PATH, "wts_dataset_test/new_bbox/test"),
-  "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_test/WTS_DATASET_PUBLIC_TEST/annotations/caption/test/public_challenge"),
+  "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_test/annotations/caption/test/public_challenge"),
   "bbox_pedestrian": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/WTS_DATASET_PUBLIC_TEST_BBOX/annotations/{SELECTED_BBOX}/pedestrian/test/public"),
   "bbox_vehicle": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/WTS_DATASET_PUBLIC_TEST_BBOX/annotations/{SELECTED_BBOX}/vehicle/test/public")
 }
@@ -50,7 +50,7 @@ wts_test_main = {
 wts_test_normal = {
   "name": "wts_test_normal",
   "features": os.path.join(FEATURE_PATH, "wts_dataset_test/new_bbox/test/normal_trimmed"),
-  "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_test/WTS_DATASET_PUBLIC_TEST/annotations/caption/test/public_challenge/normal_trimmed"),
+  "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_test/annotations/caption/test/public_challenge/normal_trimmed"),
   "bbox_pedestrian": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/WTS_DATASET_PUBLIC_TEST_BBOX/annotations/{SELECTED_BBOX}/pedestrian/test/public"),
   "bbox_vehicle": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/WTS_DATASET_PUBLIC_TEST_BBOX/annotations/{SELECTED_BBOX}/vehicle/test/public")
 }
@@ -58,7 +58,7 @@ wts_test_normal = {
 wts_test_external = {
   "name": "wts_test_external",
   "features": os.path.join(FEATURE_PATH, "external/BDD_PC_5K/new_bbox/test"),
-  "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_test/WTS_DATASET_PUBLIC_TEST/external/BDD_PC_5K/annotations/caption/test/public_challenge"),
+  "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_test/external/annotations/caption/test/public_challenge"),
   "bbox_pedestrian": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/WTS_DATASET_PUBLIC_TEST_BBOX/external/BDD_TC_5K/annotations/{SELECTED_BBOX}/test/public"),
   "bbox_vehicle": None
 }

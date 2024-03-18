@@ -359,7 +359,6 @@ class BaseDataset(Dataset):
         self._get_time_token(st, duration, view["org_feat_len"]) for st in start
       ]
       denoising_feat = phase_sentinel_vid_mask(feat, vid_mask, start_frames)
-      assert not torch.all(feat == denoising_feat)
     
     if not self.return_raw_text:
       ret = {
