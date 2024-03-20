@@ -13,19 +13,24 @@ class WTSTrainDataset(BaseDataset):
                tokenizer, 
                feature_branches=["mix"],
                denoising=False,
-               phase_noise_density=0.5):
+               phase_noise_density=0.5,
+               use_local=False,
+               max_phases=6):
+    
     super().__init__(cfg, 
                      cfg.TRAIN_DATASETS, 
                      tokenizer,
                      feature_branches, 
                      cfg.TRAIN_RANDOM_PAD_TIME,
                      denoising=denoising,
-                     phase_noise_density=phase_noise_density)
+                     phase_noise_density=phase_noise_density,
+                     use_local=use_local,
+                     max_phases=max_phases)
     
 
 class WTSValDataset(BaseDataset):
   
-  def __init__(self, cfg, tokenizer):
+  def __init__(self, cfg, tokenizer, use_local=False, max_phases=6):
     
     super().__init__(cfg, 
                      cfg.VAL_DATASETS, 
@@ -33,7 +38,9 @@ class WTSValDataset(BaseDataset):
                      feature_branches=["mix"], 
                      random_pad_time=False,
                      return_raw_text=True,
-                     augment=False)
+                     augment=False,
+                     use_local=use_local,
+                     max_phases=max_phases)
     
     self.cutoff_ds = None
     
@@ -96,7 +103,7 @@ class WTSValDataset(BaseDataset):
 
 class WTSTestDataset(BaseDataset):
   
-  def __init__(self, cfg, tokenizer):
+  def __init__(self, cfg, tokenizer, use_local=False, max_phases=6):
     
     super().__init__(cfg, 
                      cfg.TEST_DATASETS, 
@@ -104,7 +111,9 @@ class WTSTestDataset(BaseDataset):
                      feature_branches=["mix"], 
                      random_pad_time=False,
                      return_raw_text=True,
-                     augment=False)
+                     augment=False,
+                     use_local=use_local,
+                     max_phases=max_phases)
     
     self.cutoff_ds = None
     
@@ -172,11 +181,15 @@ class WTSTestDataset(BaseDataset):
       feat = feat_dict["overhead"]
       view = feat_dict["overhead_view"]
 
-    return {
+    ret = {
       "feat": feat,
       "scenario": scenario,
       "label_order": [int(l) for l in view["label_order"]],
     }
+    if self.use_local:
+      ret["local"] = view["local"]
+
+    return ret
 
 
 def wts_test_collate_fn(batch):
@@ -184,11 +197,14 @@ def wts_test_collate_fn(batch):
   feat = torch.stack([batch[i]["feat"] for i in range(bs)])
   scenario = [batch[i]["scenario"] for i in range(bs)]
   label_order = [batch[i]["label_order"] for i in range(bs)]
-  return {
+  ret = {
     "feat": feat,
     "scenario": scenario,
     "label_order": label_order,
   }
+  if "local" in batch[0]:
+    ret["local"] = [batch[i]["local"] for i in range(bs)]
+  return ret
   
 
 def batch_tokens(tokens, bs):
@@ -216,6 +232,9 @@ def wts_base_collate_fn(batch):
     "vehicle_tokens": vehicle_tokens,
     "pedestrian_tokens": pedestrian_tokens
   }
+  
+  if "local" in batch[0]:
+    ret["local"] = [batch[i]["local"] for i in range(bs)]
   
   if "vehicle_text" in batch[0]:
     vehicle_text = [batch[i]["vehicle_text"] for i in range(bs)]

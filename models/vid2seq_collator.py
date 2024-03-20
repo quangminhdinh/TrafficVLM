@@ -3,9 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .vid2seq import Vid2Seq
-from .utils import freeze_module, total_parameters
 from .modeling_t5 import T5ForConditionalGeneration
 from .mlp import Mlp
+from .temporal_encoder import DependentTemporalEncoder
+from .utils import (
+  freeze_module, 
+  total_parameters,
+  clone_and_subsample_pos_embed
+)
 
 
 class Vid2SeqCollator(nn.Module):
@@ -14,12 +19,15 @@ class Vid2SeqCollator(nn.Module):
                tokenizer,
                num_bins=100,
                num_features=100,
-               features_dim=768) -> None:
+               is_eval=False) -> None:
     
     super().__init__()
     
+    print(f"\n{self.__class__.__name__}'s configurations:")
+    
     self.num_bins = num_bins
     self.label_smoothing = cfg.LABEL_SMOOTHING
+    self.features_dim = cfg.EMBED_DIM
     
     print("\nInitializing Vid2Seq model...")
     self.model = Vid2Seq(cfg, tokenizer, num_bins, num_features)
@@ -30,11 +38,33 @@ class Vid2SeqCollator(nn.Module):
     
     self.pretrained_ckpt = cfg.VID2SEQ_PATH
     self.load_ckpt = cfg.LOAD_VID2SEQ_CKPT
-    if self.load_ckpt:
+    if self.load_ckpt and not is_eval:
       assert self.pretrained_ckpt is not None
+      checkpoint = torch.load(self.pretrained_ckpt, map_location="cpu")
+      self.load_pretrained(checkpoint["model"])
+      self.pass_optim_states = checkpoint["optimizer"] if "optimizer" in checkpoint else None
+      print("\nPretrained Vid2Seq checkpoint has beed loaded!")
     
-    self.vehicle_embed = nn.Parameter(torch.rand(cfg.TARGET_EMBED_SIZE, features_dim))
-    self.pedestrian_embed = nn.Parameter(torch.rand(cfg.TARGET_EMBED_SIZE, features_dim))
+    self.use_local = cfg.USE_LOCAL
+    self.max_phases = cfg.MAX_PHASES
+    self.encode_local_temporal = cfg.ENCODE_LOCAL_TEMPORAL
+    if self.use_local:
+      print("Using local features...")
+      if self.encode_local_temporal:
+        print("Temporal encoder will be added for local branch!")
+        self.local_mask = nn.Parameter(torch.rand(self.max_phases, self.features_dim))
+        self.local_temporal_encoder = DependentTemporalEncoder(
+          self.model.visual_encoder, self.max_phases
+        )
+      else:
+        self.local_mask = nn.Parameter(
+          clone_and_subsample_pos_embed(
+            self.model.visual_encoder.pos_embed, self.max_phases
+          )
+        )
+    
+    self.vehicle_embed = nn.Parameter(torch.rand(cfg.TARGET_EMBED_SIZE, self.features_dim))
+    self.pedestrian_embed = nn.Parameter(torch.rand(cfg.TARGET_EMBED_SIZE, self.features_dim))
       
   def load_pretrained(self, model_ckpt):
     self.model.load_state_dict(model_ckpt, strict=False)
@@ -70,13 +100,32 @@ class Vid2SeqCollator(nn.Module):
       torch.norm(trainable_weight, dim=1).mean(0) / frozen_norm
     )
   
-  def forward(self, feats, output_tokens, tgt_type):
+  def _get_local_embeddings(self, local_batch, device = torch.device("cuda")):
+    local_embed =  torch.stack([
+      torch.stack([
+        local_phase.to(device)
+        if local_phase is not None
+        else self.local_mask[phase_idx]
+        for phase_idx, local_phase in enumerate(local_item)
+      ]) for local_item in local_batch
+    ]).to(device)
+    if self.encode_local_temporal:
+      return self.local_temporal_encoder(local_embed)
+    return local_embed
+  
+  def forward(self, feats, output_tokens, tgt_type, local_batch=None):
     if tgt_type == "vehicle":
       tgt_embed = self.vehicle_embed
     elif tgt_type == "pedestrian":
       tgt_embed = self.pedestrian_embed
     tgt_embed = torch.unsqueeze(tgt_embed, 0)
     tgt_embed = tgt_embed.repeat(len(feats), 1, 1)
+    
+    if self.use_local:
+      assert local_batch is not None
+      local_embed = self._get_local_embeddings(local_batch, feats.device)
+      tgt_embed = torch.cat((local_embed, tgt_embed), 1)
+    
     return self.model(
       feats,
       tgt_embed,
@@ -88,6 +137,7 @@ class Vid2SeqCollator(nn.Module):
     self,
     feats,
     tgt_type,
+    local_batch=None,
     use_nucleus_sampling=False,
     num_beams=4,
     max_length=256,
@@ -102,6 +152,7 @@ class Vid2SeqCollator(nn.Module):
     Args:
       feats (torch.Tensor): A tensor of shape (batch_size, T, D).
       tgt_type (string): Output type (vehicle or pedestrian).
+      local_batch (list): Size (batch_size, max_phases, features_dim | None)
       use_nucleus_sampling (bool): Whether to use nucleus sampling. If False, use top-k sampling.
       num_beams (int): Number of beams for beam search. 1 means no beam search.
       max_length (int): The maximum length of the sequence to be generated.
@@ -118,6 +169,12 @@ class Vid2SeqCollator(nn.Module):
       tgt_embed = self.pedestrian_embed
     tgt_embed = torch.unsqueeze(tgt_embed, 0)
     tgt_embed = tgt_embed.repeat(len(feats), 1, 1)
+    
+    if self.use_local:
+      assert local_batch is not None
+      local_embed = self._get_local_embeddings(local_batch, feats.device)
+      tgt_embed = torch.cat((local_embed, tgt_embed), 1)
+    
     return self.model.generate(
       feats,
       tgt_embed,

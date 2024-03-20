@@ -27,6 +27,7 @@ from solver import (
   setup_logging
 )
 
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 
@@ -47,9 +48,11 @@ def main(args, cfg):
     tokenizer, 
     cfg.MODEL.FEATURE_BRANCHES,
     cfg.SOLVER.TRAIN.DENOISING,
-    cfg.SOLVER.TRAIN.PHASE_NOISE_DENSITY
+    cfg.SOLVER.TRAIN.PHASE_NOISE_DENSITY,
+    cfg.MODEL.USE_LOCAL,
+    cfg.MODEL.MAX_PHASES
   )
-  val_set = WTSValDataset(cfg.DATA, tokenizer)
+  val_set = WTSValDataset(cfg.DATA, tokenizer, cfg.MODEL.USE_LOCAL, cfg.MODEL.MAX_PHASES)
   
   train_sampler = RandomSampler(train_set)
   val_sampler = SequentialSampler(val_set)

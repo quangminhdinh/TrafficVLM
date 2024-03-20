@@ -167,7 +167,7 @@ def compute_metrics_single_wrapper(pair):
 def batch_evaluate_concurrent(pred_all_sentences, gt_all_sentences) -> Dict[str, float]:
     metrics_all_category_means = {}
         
-    with ProcessPoolExecutor(max_workers=2) as exe:
+    with ProcessPoolExecutor(max_workers=1) as exe:
         result = exe.map(compute_metrics_single_wrapper,
                          zip(pred_all_sentences, gt_all_sentences))
         raw_metrics = list(result)

@@ -26,7 +26,9 @@ class BaseDataset(Dataset):
                return_raw_text=False,
                augment=True,
                denoising=False,
-               phase_noise_density=0.5):
+               phase_noise_density=0.5,
+               use_local=False,
+               max_phases=6):
     
     super().__init__()
     
@@ -60,6 +62,9 @@ class BaseDataset(Dataset):
     self.feature_branches = feature_branches
     if self.feature_branches is not None:
       print(f"Using features: {', '.join(self.feature_branches)}.")
+    
+    self.use_local = use_local
+    self.max_phases = max_phases
     
     dataset_names = [d["name"] for d in dataset_ratios]
     self.dataset_path_cfgs = get_dataset_paths(*dataset_names)
@@ -199,6 +204,28 @@ class BaseDataset(Dataset):
   def _load_clip_features(self, path):
     return torch.from_numpy(np.load(path)).float()
   
+  def _load_local(self, local_dir, view):
+    frame_to_phase_path = os.path.join(local_dir, "phase.json")
+    with open(frame_to_phase_path, "r") as map_file:
+      frame_to_phase = json.load(map_file)
+    phase_to_frame = {}
+    for frame, phase in frame_to_phase.items():
+      if not os.path.isfile(
+        os.path.join(local_dir, frame)
+      ):
+        continue
+      if phase not in phase_to_frame:
+        phase_to_frame[phase] = [frame]
+      else:
+        phase_to_frame[phase].append(frame)
+    view["local"] = [
+      self._load_clip_features(
+        os.path.join(local_dir, np.random.choice(phase_to_frame[phase_idx]))
+      ).flatten()
+      if phase_idx in phase_to_frame else None
+      for phase_idx in range(self.max_phases)
+    ]
+  
   def _load_features(self, idx):
     ds_cfg, scenario = self._get_scenario(idx)
     is_external = ds_cfg["bbox_vehicle"] is None
@@ -220,30 +247,51 @@ class BaseDataset(Dataset):
       view = feat_dict["vehicle_view"]
       if is_external:
         vehicle_path = os.path.join(ds_cfg["features"], f"{scenario}.npy")
+        if self.use_local:
+          self._load_local(
+            os.path.join(
+              ds_cfg["local_annotated"], scenario
+            ), view
+          )
       else:
         vehicle_dir = os.path.join(ds_cfg["features"], scenario, "vehicle_view") # npy
-        vehicle_path = os.path.join(vehicle_dir, sample_files(vehicle_dir)) # type: ignore
+        selected_video = str(sample_files(vehicle_dir))
+        vehicle_path = os.path.join(vehicle_dir, selected_video)
+        if self.use_local:
+          self._load_local(
+            os.path.join(
+              ds_cfg["local_annotated"], scenario, "vehicle_view", selected_video[:-4]
+            ), view
+          )
       
-      raw_feats = self._load_clip_features(vehicle_path)
-      selected_frames = self._get_frames(view, len(raw_feats))
-      feats = torch.index_select(raw_feats, 0, selected_frames)
-      assert len(feats) == len(selected_frames)
+      feats = self._load_features_and_adjust_rate(vehicle_path, view)
       view["org_feat_len"] = len(feats) if len(feats) < self.max_feats else self.max_feats
       feat_dict["vehicle"] = self._resample_video_features(feats)
       
     if "overhead_view" in feat_dict:
       view = feat_dict["overhead_view"]
       overhead_dir = os.path.join(ds_cfg["features"], scenario, "overhead_view") # npy
-      overhead_path = os.path.join(overhead_dir, sample_files(overhead_dir)) # type: ignore
+      selected_video = str(sample_files(overhead_dir))
+      overhead_path = os.path.join(overhead_dir, selected_video)
+      if self.use_local:
+          self._load_local(
+            os.path.join(
+              ds_cfg["local_annotated"], scenario, "overhead_view", selected_video[:-4]
+            ), view
+          )
       
-      raw_feats = self._load_clip_features(overhead_path)
-      selected_frames = self._get_frames(view, len(raw_feats))
-      feats = torch.index_select(raw_feats, 0, selected_frames)
-      assert len(feats) == len(selected_frames)
+      feats = self._load_features_and_adjust_rate(overhead_path, view)
       view["org_feat_len"] = len(feats) if len(feats) < self.max_feats else self.max_feats
       feat_dict["overhead"] = self._resample_video_features(feats)
 
     return feat_dict
+  
+  def _load_features_and_adjust_rate(self, path, view):
+    raw_feats = self._load_clip_features(path)
+    selected_frames = self._get_frames(view, len(raw_feats))
+    feats = torch.index_select(raw_feats, 0, selected_frames)
+    assert len(feats) == len(selected_frames)
+    return feats
   
   def _redistribute_cutoff_samples(self):
     if self.cutoff_ds is not None:
@@ -328,11 +376,11 @@ class BaseDataset(Dataset):
                           for st, ed in zip(start, end)]
                                        
     vehicle_text = [
-      simple_text_preprocess(p['caption_vehicle']) for p in phases
+      self.augmentor.apply_nlp_long_sentence(p['caption_vehicle']) for p in phases
     ]                   
     vehicle_tokens = self._get_output_tokens(vehicle_text, time_output_tokens)
     pedestrian_text = [
-      simple_text_preprocess(p['caption_pedestrian']) for p in phases
+      self.augmentor.apply_nlp_long_sentence(p['caption_pedestrian']) for p in phases
     ]  
     pedestrian_tokens = self._get_output_tokens(pedestrian_text, time_output_tokens)
     
@@ -360,12 +408,16 @@ class BaseDataset(Dataset):
       ]
       denoising_feat = phase_sentinel_vid_mask(feat, vid_mask, start_frames)
     
+    ret = {
+      "feat": feat,
+      "vehicle_tokens": vehicle_tokens,
+      "pedestrian_tokens": pedestrian_tokens
+    }
+    
+    if self.use_local:
+      ret["local"] = view["local"]
+    
     if not self.return_raw_text:
-      ret = {
-        "feat": feat,
-        "vehicle_tokens": vehicle_tokens,
-        "pedestrian_tokens": pedestrian_tokens
-      }
       if self.denoising:
         ret["denoising_feat"] = denoising_feat
         ret["denoise_vehicle_tokens"] = denoise_vehicle_tokens
@@ -378,13 +430,10 @@ class BaseDataset(Dataset):
     vehicle_output_text = self._get_output_text(vehicle_text, time_tokens)
     pedestrian_output_text = self._get_output_text(pedestrian_text, time_tokens)
     
-    return {
-      "feat": feat,
-      "vehicle_tokens": vehicle_tokens,
-      "pedestrian_tokens": pedestrian_tokens,
-      "vehicle_text": vehicle_output_text,
-      "pedestrian_text": pedestrian_output_text,
-    }
+    ret["vehicle_text"] = vehicle_output_text
+    ret["pedestrian_text"] = pedestrian_output_text
+    
+    return ret
   
   def __len__(self):
     return len(self.ds_indices)

@@ -40,7 +40,7 @@ def main(args, cfg):
   device = torch.device(args.device)
   tokenizer = get_tokenizer(cfg.MODEL.T5_PATH, cfg.DATA.NUM_BINS)
   
-  test_set = WTSTestDataset(cfg.DATA, tokenizer)
+  test_set = WTSTestDataset(cfg.DATA, tokenizer, cfg.MODEL.USE_LOCAL, cfg.MODEL.MAX_PHASES)
   
   test_sampler = SequentialSampler(test_set)
   
@@ -50,7 +50,7 @@ def main(args, cfg):
                            collate_fn=wts_test_collate_fn,
                            num_workers=os.cpu_count()) # type: ignore
   
-  model = Vid2SeqCollator(cfg.MODEL, tokenizer, cfg.DATA.NUM_BINS, cfg.DATA.MAX_FEATS)
+  model = Vid2SeqCollator(cfg.MODEL, tokenizer, cfg.DATA.NUM_BINS, cfg.DATA.MAX_FEATS, is_eval=True)
   model.to(device)
 
   hparams = convert_to_dict(cfg)
