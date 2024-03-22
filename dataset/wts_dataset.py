@@ -154,15 +154,15 @@ class WTSTestDataset(BaseDataset):
       caption_path = os.path.join(ds_cfg["captions"], f"{scenario}_caption.json")
       with open(caption_path, 'r') as caption_file:
         cap = json.load(caption_file)
-      feat_dict["vehicle_view"] = cap
+      feat_dict["view"] = cap
+      feat_dict["branch"] = "vehicle"
       return
     assert len(usable) > 0
     if len(usable) == 1:
-      view = f"{usable[0]}_view"
-      self._load_view_caption(ds_cfg, scenario, view, feat_dict)
+      self._load_view_caption(ds_cfg, scenario, usable[0], feat_dict)
       return
-    self._load_view_caption(ds_cfg, scenario, "vehicle_view", feat_dict)
-    
+    self._load_view_caption(ds_cfg, scenario, "vehicle", feat_dict)
+
   def __getitem__(self, idx):
     ds_cfg, scenario = self._get_scenario(idx)
     is_external = ds_cfg["bbox_vehicle"] is None
@@ -172,14 +172,9 @@ class WTSTestDataset(BaseDataset):
       scenario = scenario[0]
     
     feat_dict = self._load_features(idx)
-    if "vehicle" in feat_dict and "overhead" in feat_dict:
-      raise NotImplementedError()
-    elif "vehicle" in feat_dict:
-      feat = feat_dict["vehicle"]
-      view = feat_dict["vehicle_view"]
-    else:
-      feat = feat_dict["overhead"]
-      view = feat_dict["overhead_view"]
+    
+    feat = feat_dict["feats"]
+    view = feat_dict["view"]
 
     ret = {
       "feat": feat,
@@ -188,6 +183,9 @@ class WTSTestDataset(BaseDataset):
     }
     if self.use_local:
       ret["local"] = view["local"]
+      
+    if self.sub_feature is not None:
+      ret["sub_feat"] = feat_dict["sub_feats"]
 
     return ret
 
@@ -197,13 +195,18 @@ def wts_test_collate_fn(batch):
   feat = torch.stack([batch[i]["feat"] for i in range(bs)])
   scenario = [batch[i]["scenario"] for i in range(bs)]
   label_order = [batch[i]["label_order"] for i in range(bs)]
+  
   ret = {
     "feat": feat,
     "scenario": scenario,
     "label_order": label_order,
   }
+  
   if "local" in batch[0]:
     ret["local"] = [batch[i]["local"] for i in range(bs)]
+  if "sub_feat" in batch[0]:
+    ret["sub_feat"] = torch.stack([batch[i]["sub_feat"] for i in range(bs)])
+
   return ret
   
 
@@ -235,6 +238,9 @@ def wts_base_collate_fn(batch):
   
   if "local" in batch[0]:
     ret["local"] = [batch[i]["local"] for i in range(bs)]
+    
+  if "sub_feat" in batch[0]:
+    ret["sub_feat"] = torch.stack([batch[i]["sub_feat"] for i in range(bs)])
   
   if "vehicle_text" in batch[0]:
     vehicle_text = [batch[i]["vehicle_text"] for i in range(bs)]

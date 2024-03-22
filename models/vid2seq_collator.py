@@ -19,6 +19,7 @@ class Vid2SeqCollator(nn.Module):
                tokenizer,
                num_bins=100,
                num_features=100,
+               use_sub_feat=False,
                is_eval=False) -> None:
     
     super().__init__()
@@ -44,6 +45,10 @@ class Vid2SeqCollator(nn.Module):
       self.load_pretrained(checkpoint["model"])
       self.pass_optim_states = checkpoint["optimizer"] if "optimizer" in checkpoint else None
       print("\nPretrained Vid2Seq checkpoint has beed loaded!")
+    
+    self.use_sub_feat = use_sub_feat
+    if self.use_sub_feat:
+      print("Using sub features...")
     
     self.use_local = cfg.USE_LOCAL
     self.max_phases = cfg.MAX_PHASES
@@ -113,13 +118,18 @@ class Vid2SeqCollator(nn.Module):
       return self.local_temporal_encoder(local_embed)
     return local_embed
   
-  def forward(self, feats, output_tokens, tgt_type, local_batch=None):
+  def forward(self, feats, output_tokens, tgt_type, local_batch=None, sub_feat=None):
     if tgt_type == "vehicle":
       tgt_embed = self.vehicle_embed
     elif tgt_type == "pedestrian":
       tgt_embed = self.pedestrian_embed
     tgt_embed = torch.unsqueeze(tgt_embed, 0)
     tgt_embed = tgt_embed.repeat(len(feats), 1, 1)
+    
+    if self.use_sub_feat:
+      assert sub_feat is not None
+      assert feats.shape == sub_feat.shape
+      feats = torch.cat((feats, sub_feat), 1)
     
     if self.use_local:
       assert local_batch is not None
@@ -138,6 +148,7 @@ class Vid2SeqCollator(nn.Module):
     feats,
     tgt_type,
     local_batch=None,
+    sub_feat=None,
     use_nucleus_sampling=False,
     num_beams=4,
     max_length=256,
@@ -169,6 +180,11 @@ class Vid2SeqCollator(nn.Module):
       tgt_embed = self.pedestrian_embed
     tgt_embed = torch.unsqueeze(tgt_embed, 0)
     tgt_embed = tgt_embed.repeat(len(feats), 1, 1)
+    
+    if self.use_sub_feat:
+      assert sub_feat is not None
+      assert feats.shape == sub_feat.shape
+      feats = torch.cat((feats, sub_feat), 1)
     
     if self.use_local:
       assert local_batch is not None

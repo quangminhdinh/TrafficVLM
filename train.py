@@ -68,7 +68,9 @@ def main(args, cfg):
                           collate_fn=wts_base_collate_fn,
                           num_workers=os.cpu_count()) # type: ignore
   
-  model = Vid2SeqCollator(cfg.MODEL, tokenizer, cfg.DATA.NUM_BINS, cfg.DATA.MAX_FEATS)
+  model = Vid2SeqCollator(
+    cfg.MODEL, tokenizer, cfg.DATA.NUM_BINS, cfg.DATA.MAX_FEATS, cfg.DATA.SUB_FEATURE is not None
+  )
   model.to(device)
   
   # Set up optimizer

@@ -50,6 +50,7 @@ class WTSSolver(BaseSolver):
         self.register_stateful('model', 'optim')
         
         self.use_local = self.model.use_local
+        self.use_sub_feat = self.model.use_sub_feat
         
         if cfg.LOG_TO_WANDB and not is_eval:
             self.init_wandb(
@@ -128,9 +129,10 @@ class WTSSolver(BaseSolver):
             vehicle_tokens = batch["vehicle_tokens"].to(self.device)
             pedestrian_tokens = batch["pedestrian_tokens"].to(self.device)
             local_batch = batch["local"] if self.use_local else None
+            sub_feat = batch["sub_feat"].to(self.device) if self.use_sub_feat else None
             
-            vehicle_loss = self.model(feat, vehicle_tokens, "vehicle", local_batch)
-            pedestrian_loss = self.model(feat, pedestrian_tokens, "pedestrian", local_batch)
+            vehicle_loss = self.model(feat, vehicle_tokens, "vehicle", local_batch, sub_feat)
+            pedestrian_loss = self.model(feat, pedestrian_tokens, "pedestrian", local_batch, sub_feat)
             generative_loss = vehicle_loss + pedestrian_loss
             
             if self.denoising:
@@ -139,10 +141,10 @@ class WTSSolver(BaseSolver):
                 denoise_pedestrian_tokens = batch["denoise_pedestrian_tokens"].to(self.device)
                 
                 denoise_vehicle_loss = self.model(
-                    denoising_feat, denoise_vehicle_tokens, "vehicle", local_batch
+                    denoising_feat, denoise_vehicle_tokens, "vehicle", local_batch, sub_feat
                 )
                 denoise_pedestrian_loss = self.model(
-                    denoising_feat, denoise_pedestrian_tokens, "pedestrian", local_batch
+                    denoising_feat, denoise_pedestrian_tokens, "pedestrian", local_batch, sub_feat
                 )
                 denoising_loss = denoise_vehicle_loss + denoise_pedestrian_loss
                 loss = generative_loss + denoising_loss
@@ -177,12 +179,13 @@ class WTSSolver(BaseSolver):
         return metrics
     
     @torch.no_grad()
-    def generate_samples(self, feat, tgt_type, max_output_tokens, local_batch=None, use_beam=False):
+    def generate_samples(self, feat, tgt_type, max_output_tokens, local_batch=None, sub_feat=None, use_beam=False):
         tbu_cfg = self.test_cfg if use_beam else self.val_cfg
         return self.model.generate(
             feats=feat,
             tgt_type=tgt_type,
             local_batch=local_batch,
+            sub_feat=sub_feat,
             use_nucleus_sampling=tbu_cfg.NUM_BEAMS == 0,
             num_beams=tbu_cfg.NUM_BEAMS,
             max_length=max_output_tokens,
@@ -219,15 +222,16 @@ class WTSSolver(BaseSolver):
                 vehicle_text = batch["vehicle_text"]
                 pedestrian_text = batch["pedestrian_text"]
                 local_batch = batch["local"] if self.use_local else None
+                sub_feat = batch["sub_feat"].to(self.device) if self.use_sub_feat else None
                 
                 pred_vehicle_text = self.generate_samples(
-                    feat, "vehicle", loader.dataset.max_output_tokens, local_batch
+                    feat, "vehicle", loader.dataset.max_output_tokens, local_batch, sub_feat
                 )
                 pred_pedestrian_text = self.generate_samples(
-                    feat, "pedestrian", loader.dataset.max_output_tokens, local_batch
+                    feat, "pedestrian", loader.dataset.max_output_tokens, local_batch, sub_feat
                 )
-                vehicle_loss = self.model(feat, vehicle_tokens, "vehicle", local_batch)
-                pedestrian_loss = self.model(feat, pedestrian_tokens, "pedestrian", local_batch)
+                vehicle_loss = self.model(feat, vehicle_tokens, "vehicle", local_batch, sub_feat)
+                pedestrian_loss = self.model(feat, pedestrian_tokens, "pedestrian", local_batch, sub_feat)
                 loss = vehicle_loss + pedestrian_loss
                 
                 vehicle_metrics = batch_evaluate_scenario(pred_vehicle_text, vehicle_text)
@@ -271,8 +275,8 @@ class WTSSolver(BaseSolver):
     
     @torch.no_grad()
     def generate_to_len(self, feat, max_output_tokens, tgt_type, scenarios, 
-                        num_phases, local_batch=None, max_trials=5):
-        texts = self.generate_samples(feat, tgt_type, max_output_tokens, local_batch, use_beam=True)
+                        num_phases, local_batch=None, sub_feat=None, max_trials=5):
+        texts = self.generate_samples(feat, tgt_type, max_output_tokens, local_batch, sub_feat, use_beam=True)
         parsed_texts = batch_parse(texts)
         assert len(scenarios) == len(parsed_texts)
         
@@ -299,12 +303,13 @@ class WTSSolver(BaseSolver):
             [scenarios[i] for i in invalid_indices],
             [num_phases[i] for i in invalid_indices],
             local_batch,
+            sub_feat,
             max_trials - 1
         ) | results
         
     @torch.no_grad()
-    def generate_to_len_once(self, feat, max_output_tokens, tgt_type, scenarios, num_phases, local_batch=None):
-        texts = self.generate_samples(feat, tgt_type, max_output_tokens, local_batch, use_beam=True)
+    def generate_to_len_once(self, feat, max_output_tokens, tgt_type, scenarios, num_phases, local_batch=None, sub_feat=None):
+        texts = self.generate_samples(feat, tgt_type, max_output_tokens, local_batch, sub_feat, use_beam=True)
         parsed_texts = batch_parse(texts)
         assert len(scenarios) == len(parsed_texts)
         
@@ -341,12 +346,13 @@ class WTSSolver(BaseSolver):
                 label_order = batch["label_order"]
                 num_phases = [len(label) for label in label_order]
                 local_batch = batch["local"] if self.use_local else None
+                sub_feat = batch["sub_feat"].to(self.device) if self.use_sub_feat else None
                 
                 vehicle_dict = self.generate_to_len_once(
-                    feat, loader.dataset.max_output_tokens, "vehicle", scenarios, num_phases, local_batch
+                    feat, loader.dataset.max_output_tokens, "vehicle", scenarios, num_phases, local_batch, sub_feat
                 )
                 pedestrian_dict = self.generate_to_len_once(
-                    feat, loader.dataset.max_output_tokens, "pedestrian", scenarios, num_phases, local_batch
+                    feat, loader.dataset.max_output_tokens, "pedestrian", scenarios, num_phases, local_batch, sub_feat
                 )
                 for scenario_idx, scenario in enumerate(scenarios):
                     assert scenario not in return_dict

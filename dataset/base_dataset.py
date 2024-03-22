@@ -66,6 +66,11 @@ class BaseDataset(Dataset):
     self.use_local = use_local
     self.max_phases = max_phases
     
+    self.main_feature = cfg.MAIN_FEATURE
+    self.sub_feature = cfg.SUB_FEATURE
+    print("Main feature:", self.main_feature)
+    print("Sub feature:", self.sub_feature)
+    
     dataset_names = [d["name"] for d in dataset_ratios]
     self.dataset_path_cfgs = get_dataset_paths(*dataset_names)
     
@@ -76,7 +81,7 @@ class BaseDataset(Dataset):
     fixed_len = 0
     for idx, ds_cfg in enumerate(self.dataset_path_cfgs):
       ds_cfg["ratio"] = dataset_ratios[idx]["ratio"]
-      scenarios = get_all_top(ds_cfg["features"])
+      scenarios = get_all_top(ds_cfg[self.main_feature])
       if ds_cfg["bbox_vehicle"] is None:
         cap_side = get_all_top(ds_cfg["captions"])
         if len(cap_side) > len(scenarios):
@@ -150,13 +155,13 @@ class BaseDataset(Dataset):
     for scenario in ds_cfg["scenarios"]:
       usable = ["vehicle", "overhead"]
       if "vehicle" in self.feature_branches or "mix" in self.feature_branches:
-        local_dir = os.path.join(ds_cfg["features"], scenario, "vehicle_view")
+        local_dir = os.path.join(ds_cfg[self.main_feature], scenario, "vehicle_view")
         if len(os.listdir(local_dir)) == 0:
           usable.remove("vehicle")
       else:
         usable.remove("vehicle")
       if "overhead" in self.feature_branches or "mix" in self.feature_branches:
-        local_dir = os.path.join(ds_cfg["features"], scenario, "overhead_view")
+        local_dir = os.path.join(ds_cfg[self.main_feature], scenario, "overhead_view")
         if len(os.listdir(local_dir)) == 0:
           usable.remove("overhead")
       else:
@@ -172,34 +177,35 @@ class BaseDataset(Dataset):
     ds_cfg["scenarios"] = eligible
     ds_cfg["len"] = len(eligible)
   
-  def _load_view_caption(self, ds_cfg, scenario, view, feat_dict):
-    caption_dir = os.path.join(ds_cfg["captions"], scenario, view)
+  def _load_view_caption(self, ds_cfg, scenario, branch, feat_dict):
+    caption_dir = os.path.join(ds_cfg["captions"], scenario, f"{branch}_view")
     caption_path = os.path.join(caption_dir, sample_files(caption_dir)) # type: ignore
     with open(caption_path, 'r') as caption_file:
       cap = json.load(caption_file)
-    feat_dict[view] = cap
+    feat_dict["view"] = cap
+    feat_dict["branch"] = branch
   
   def _load_caption(self, ds_cfg, usable, scenario, is_external, feat_dict={}):
     if is_external:
       caption_path = os.path.join(ds_cfg["captions"], f"{scenario}_caption.json")
       with open(caption_path, 'r') as caption_file:
         cap = json.load(caption_file)
-      feat_dict["vehicle_view"] = cap
+      feat_dict["view"] = cap
+      feat_dict["branch"] = "vehicle"
       return
     if len(usable) == 1 and (usable[0] in self.feature_branches or "mix" in self.feature_branches):
-      view = f"{usable[0]}_view"
-      self._load_view_caption(ds_cfg, scenario, view, feat_dict)
+      self._load_view_caption(ds_cfg, scenario, usable[0], feat_dict)
       return
     if len(usable) == 1:
       raise RuntimeError("Incorrect behaviour!")
     if "mix" in self.feature_branches:
-      view = "overhead_view" if np.random.uniform() < self.overhead_ratio else "vehicle_view"
-      self._load_view_caption(ds_cfg, scenario, view, feat_dict)
+      branch = "overhead" if np.random.uniform() < self.overhead_ratio else "vehicle"
+      self._load_view_caption(ds_cfg, scenario, branch, feat_dict)
       return
     if "vehicle" in self.feature_branches:
-      self._load_view_caption(ds_cfg, scenario, "vehicle_view", feat_dict)
+      self._load_view_caption(ds_cfg, scenario, "vehicle", feat_dict)
     if "overhead" in self.feature_branches:
-      self._load_view_caption(ds_cfg, scenario, "overhead_view", feat_dict)
+      self._load_view_caption(ds_cfg, scenario, "overhead", feat_dict)
       
   def _load_clip_features(self, path):
     return torch.from_numpy(np.load(path)).float()
@@ -243,55 +249,42 @@ class BaseDataset(Dataset):
       feat_dict
     )
     
-    if "vehicle_view" in feat_dict:
-      view = feat_dict["vehicle_view"]
-      if is_external:
-        vehicle_path = os.path.join(ds_cfg["features"], f"{scenario}.npy")
-        if self.use_local:
-          self._load_local(
-            os.path.join(
-              ds_cfg["local_annotated"], scenario
-            ), view
-          )
-      else:
-        vehicle_dir = os.path.join(ds_cfg["features"], scenario, "vehicle_view") # npy
-        selected_video = str(sample_files(vehicle_dir))
-        vehicle_path = os.path.join(vehicle_dir, selected_video)
-        if self.use_local:
-          self._load_local(
-            os.path.join(
-              ds_cfg["local_annotated"], scenario, "vehicle_view", selected_video[:-4]
-            ), view
-          )
-      
-      feats = self._load_features_and_adjust_rate(vehicle_path, view)
-      view["org_feat_len"] = len(feats) if len(feats) < self.max_feats else self.max_feats
-      feat_dict["vehicle"] = self._resample_video_features(feats)
-      
-    if "overhead_view" in feat_dict:
-      view = feat_dict["overhead_view"]
-      overhead_dir = os.path.join(ds_cfg["features"], scenario, "overhead_view") # npy
-      selected_video = str(sample_files(overhead_dir))
-      overhead_path = os.path.join(overhead_dir, selected_video)
+    view = feat_dict["view"]
+    branch = feat_dict["branch"]
+    if branch == "vehicle" and is_external:
+      main_path = os.path.join(ds_cfg[self.main_feature], f"{scenario}.npy")
       if self.use_local:
-          self._load_local(
-            os.path.join(
-              ds_cfg["local_annotated"], scenario, "overhead_view", selected_video[:-4]
-            ), view
-          )
-      
-      feats = self._load_features_and_adjust_rate(overhead_path, view)
-      view["org_feat_len"] = len(feats) if len(feats) < self.max_feats else self.max_feats
-      feat_dict["overhead"] = self._resample_video_features(feats)
+        local_sub_path = scenario
+      if self.sub_feature is not None:
+        sub_path = os.path.join(ds_cfg[self.sub_feature], f"{scenario}.npy")
+    else:
+      main_dir = os.path.join(ds_cfg[self.main_feature], scenario, f"{branch}_view") # npy
+      selected_video = str(sample_files(main_dir))
+      main_path = os.path.join(main_dir, selected_video)
+      if self.use_local:
+        local_sub_path = os.path.join(scenario, f"{branch}_view", selected_video[:-4])
+      if self.sub_feature is not None:
+        sub_dir = os.path.join(ds_cfg[self.sub_feature], scenario, f"{branch}_view")
+        sub_path = os.path.join(sub_dir, selected_video)
+    
+    raw_main_feats = self._load_clip_features(main_path)
+    selected_frames = self._get_frames(view, len(raw_main_feats))
+    main_feats = torch.index_select(raw_main_feats, 0, selected_frames)
+    assert len(main_feats) == len(selected_frames)
+    
+    if self.sub_feature is not None:
+      raw_sub_feats = self._load_clip_features(sub_path)
+      assert len(raw_main_feats) == len(raw_sub_feats)
+      sub_feats = torch.index_select(raw_sub_feats, 0, selected_frames)
+      feat_dict["sub_feats"] = self._resample_video_features(sub_feats)
+    
+    view["org_feat_len"] = len(main_feats) if len(main_feats) < self.max_feats else self.max_feats
+    feat_dict["feats"] = self._resample_video_features(main_feats)
+    
+    if self.use_local:
+      self._load_local(os.path.join(ds_cfg["local_annotated"], local_sub_path), view)
 
     return feat_dict
-  
-  def _load_features_and_adjust_rate(self, path, view):
-    raw_feats = self._load_clip_features(path)
-    selected_frames = self._get_frames(view, len(raw_feats))
-    feats = torch.index_select(raw_feats, 0, selected_frames)
-    assert len(feats) == len(selected_frames)
-    return feats
   
   def _redistribute_cutoff_samples(self):
     if self.cutoff_ds is not None:
@@ -357,14 +350,10 @@ class BaseDataset(Dataset):
       self._redistribute_cutoff_samples()
       
     feat_dict = self._load_features(idx)
-    if "vehicle" in feat_dict and "overhead" in feat_dict:
-      raise NotImplementedError()
-    elif "vehicle" in feat_dict:
-      feat = feat_dict["vehicle"]
-      view = feat_dict["vehicle_view"]
-    else:
-      feat = feat_dict["overhead"]
-      view = feat_dict["overhead_view"]
+    
+    feat = feat_dict["feats"]
+    view = feat_dict["view"]
+    
     duration = view["duration"]
     phases = view["event_phase"]
     
@@ -416,6 +405,9 @@ class BaseDataset(Dataset):
     
     if self.use_local:
       ret["local"] = view["local"]
+      
+    if self.sub_feature is not None:
+      ret["sub_feat"] = feat_dict["sub_feats"]
     
     if not self.return_raw_text:
       if self.denoising:

@@ -50,7 +50,9 @@ def main(args, cfg):
                            collate_fn=wts_test_collate_fn,
                            num_workers=os.cpu_count()) # type: ignore
   
-  model = Vid2SeqCollator(cfg.MODEL, tokenizer, cfg.DATA.NUM_BINS, cfg.DATA.MAX_FEATS, is_eval=True)
+  model = Vid2SeqCollator(
+    cfg.MODEL, tokenizer, cfg.DATA.NUM_BINS, cfg.DATA.MAX_FEATS, cfg.DATA.SUB_FEATURE is not None, is_eval=True
+  )
   model.to(device)
 
   hparams = convert_to_dict(cfg)
