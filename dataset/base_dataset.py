@@ -141,8 +141,9 @@ class BaseDataset(Dataset):
   def _get_scenario(self, idx):
     ds_idx = self.ds_indices[idx]
     ds_cfg = self.dataset_path_cfgs[ds_idx]
-    scenario = ds_cfg["scenarios"][idx - self.ds_scenario_start_indice[ds_idx]].strip()
-    return ds_cfg, scenario
+    in_ds_idx = idx - self.ds_scenario_start_indice[ds_idx]
+    scenario = ds_cfg["scenarios"][in_ds_idx].strip()
+    return ds_cfg, scenario, in_ds_idx
   
   def _perform_integrity_check(self, ds_cfg):
     if ds_cfg["bbox_vehicle"] is None:
@@ -212,6 +213,9 @@ class BaseDataset(Dataset):
   
   def _load_local(self, local_dir, view):
     frame_to_phase_path = os.path.join(local_dir, "phase.json")
+    if not os.path.isfile(frame_to_phase_path):
+      view["local"] = [None] * self.max_phases
+      return
     with open(frame_to_phase_path, "r") as map_file:
       frame_to_phase = json.load(map_file)
     phase_to_frame = {}
@@ -233,7 +237,7 @@ class BaseDataset(Dataset):
     ]
   
   def _load_features(self, idx):
-    ds_cfg, scenario = self._get_scenario(idx)
+    ds_cfg, scenario, in_ds_idx = self._get_scenario(idx)
     is_external = ds_cfg["bbox_vehicle"] is None
     if is_external:
       scenario = scenario.split(".")
@@ -243,7 +247,7 @@ class BaseDataset(Dataset):
     feat_dict = {}
     self._load_caption(
       ds_cfg, 
-      ds_cfg["usable"][idx] if "usable" in ds_cfg else None, 
+      ds_cfg["usable"][in_ds_idx] if "usable" in ds_cfg else None, 
       scenario, 
       is_external, 
       feat_dict

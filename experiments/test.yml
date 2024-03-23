@@ -15,7 +15,10 @@ MODEL:
 DATA:
   FPS: 3
   MAX_OUTPUT_TOKENS: 1024
-  # TRAIN_DATASETS: [
-  #   { "name": "wts_train_main", "ratio": -1 },
-  # ]
+  TRAIN_DATASETS: [
+    { "name": "wts_train_main", "ratio": -1 },
+    # { "name": "wts_train_external", "ratio": -1 },
+    # { "name": "wts_val_external", "ratio": -1 },
+    # { "name": "wts_val_main", "ratio": -1 },
+  ]
 

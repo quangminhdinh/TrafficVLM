@@ -94,7 +94,7 @@ class WTSValDataset(BaseDataset):
   
   def _get_scenario(self, idx):
     assert self.curr_ds is not None
-    return self.curr_ds, self.curr_ds["scenarios"][idx]
+    return self.curr_ds, self.curr_ds["scenarios"][idx], idx
   
   def __len__(self):
     assert self.curr_ds is not None
@@ -143,7 +143,7 @@ class WTSTestDataset(BaseDataset):
   
   def _get_scenario(self, idx):
     assert self.curr_ds is not None
-    return self.curr_ds, self.curr_ds["scenarios"][idx]
+    return self.curr_ds, self.curr_ds["scenarios"][idx], idx
   
   def __len__(self):
     assert self.curr_ds is not None
@@ -164,7 +164,7 @@ class WTSTestDataset(BaseDataset):
     self._load_view_caption(ds_cfg, scenario, "vehicle", feat_dict)
 
   def __getitem__(self, idx):
-    ds_cfg, scenario = self._get_scenario(idx)
+    ds_cfg, scenario, _ = self._get_scenario(idx)
     is_external = ds_cfg["bbox_vehicle"] is None
     if is_external:
       scenario = scenario.split(".")

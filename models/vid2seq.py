@@ -48,7 +48,7 @@ class Vid2Seq(nn.Module):
     feats = self.visual_encoder(feats) # B T D
     if self.proj_v2t is not None:
       feats = self.proj_v2t(feats)
-    feats_atts = torch.ones(feats.size()[:-1], dtype=torch.long).to(feats.device)
+    feats_atts = torch.ones(feats.size()[:-1], dtype=torch.long).to(feats.device) # ignore the feature dim 
     encoded = BaseModelOutput(
       last_hidden_state=torch.cat([feats, other_embeds], dim=1) # type: ignore
     )
@@ -57,7 +57,7 @@ class Vid2Seq(nn.Module):
     
     targets = output_tokenized['input_ids'].masked_fill(
       output_tokenized['input_ids'] == self.t5_tokenizer.pad_token_id, -100
-    )
+    ) # ignore pad token when computing loss
     
     assert type(self.t5_model) is T5ForConditionalGeneration
     outputs = self.t5_model(

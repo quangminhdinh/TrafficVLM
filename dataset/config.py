@@ -16,6 +16,15 @@ wts_train_main = {
   "local_annotated": os.path.join(FEATURE_PATH, "local/wts_dataset_zip/new_bbox/train")
 }
 
+wts_train_normal = {
+  "name": "wts_train_normal",
+  "features": os.path.join(FEATURE_PATH, "wts_dataset_zip/train/normal_trimmed"),
+  "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_zip/annotations/caption/train/normal_trimmed"),
+  "bbox_pedestrian": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/annotations/{SELECTED_BBOX}/pedestrian/train/normal_trimmed"),
+  "bbox_vehicle": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/annotations/{SELECTED_BBOX}/vehicle/train/normal_trimmed"),
+  "local_annotated": os.path.join(FEATURE_PATH, "local/wts_dataset_zip/new_bbox/train/normal_trimmed")
+}
+
 wts_val_main = {
   "name": "wts_val_main",
   "features": os.path.join(FEATURE_PATH, "wts_dataset_zip/val"),
@@ -23,6 +32,15 @@ wts_val_main = {
   "bbox_pedestrian": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/annotations/{SELECTED_BBOX}/pedestrian/val"),
   "bbox_vehicle": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/annotations/{SELECTED_BBOX}/vehicle/val"),
   "local_annotated": os.path.join(FEATURE_PATH, "local/wts_dataset_zip/new_bbox/val")
+}
+
+wts_val_normal = {
+  "name": "wts_val_normal",
+  "features": os.path.join(FEATURE_PATH, "wts_dataset_zip/val/normal_trimmed"),
+  "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_zip/annotations/caption/val/normal_trimmed"),
+  "bbox_pedestrian": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/annotations/{SELECTED_BBOX}/pedestrian/val/normal_trimmed"),
+  "bbox_vehicle": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/annotations/{SELECTED_BBOX}/vehicle/val/normal_trimmed"),
+  "local_annotated": os.path.join(FEATURE_PATH, "local/wts_dataset_zip/new_bbox/val/normal_trimmed")
 }
 
 wts_train_external = {
@@ -76,6 +94,8 @@ AVAILABLE_DATASETS = [
   wts_val_main,
   wts_train_external,
   wts_val_external,
+  wts_train_normal,
+  wts_val_normal,
   wts_test_main,
   wts_test_normal,
   wts_test_external

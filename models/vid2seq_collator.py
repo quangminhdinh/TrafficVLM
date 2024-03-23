@@ -79,7 +79,7 @@ class Vid2SeqCollator(nn.Module):
                       if feat is not None 
                       else self.overhead_unk 
                       for feat in overhead_feats]
-    return torch.stack(overhead_feats) # type: ignore
+    return torch.stack(overhead_feats) # type: ignore 
   
   def calculate_loss_from_logits(self, logits, labels):
     return F.cross_entropy(
