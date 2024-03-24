@@ -276,14 +276,17 @@ class BaseDataset(Dataset):
     main_feats = torch.index_select(raw_main_feats, 0, selected_frames)
     assert len(main_feats) == len(selected_frames)
     
-    if self.sub_feature is not None:
-      raw_sub_feats = self._load_clip_features(sub_path)
-      assert len(raw_main_feats) == len(raw_sub_feats)
-      sub_feats = torch.index_select(raw_sub_feats, 0, selected_frames)
-      feat_dict["sub_feats"] = self._resample_video_features(sub_feats)
-    
     view["org_feat_len"] = len(main_feats) if len(main_feats) < self.max_feats else self.max_feats
     feat_dict["feats"] = self._resample_video_features(main_feats)
+    
+    if self.sub_feature is not None:
+      if os.path.isfile(sub_path):
+        raw_sub_feats = self._load_clip_features(sub_path)
+        assert len(raw_main_feats) == len(raw_sub_feats)
+        sub_feats = torch.index_select(raw_sub_feats, 0, selected_frames)
+        feat_dict["sub_feats"] = self._resample_video_features(sub_feats)
+      else:
+        feat_dict["sub_feats"] = feat_dict["feats"]
     
     if self.use_local:
       self._load_local(os.path.join(ds_cfg["local_annotated"], local_sub_path), view)

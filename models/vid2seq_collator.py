@@ -118,7 +118,7 @@ class Vid2SeqCollator(nn.Module):
       return self.local_temporal_encoder(local_embed)
     return local_embed
   
-  def forward(self, feats, output_tokens, tgt_type, local_batch=None, sub_feat=None):
+  def forward(self, feats, output_tokens, tgt_type, local_batch=None, sub_feats=None):
     if tgt_type == "vehicle":
       tgt_embed = self.vehicle_embed
     elif tgt_type == "pedestrian":
@@ -127,9 +127,8 @@ class Vid2SeqCollator(nn.Module):
     tgt_embed = tgt_embed.repeat(len(feats), 1, 1)
     
     if self.use_sub_feat:
-      assert sub_feat is not None
-      assert feats.shape == sub_feat.shape
-      feats = torch.cat((feats, sub_feat), 1)
+      assert sub_feats is not None
+      assert feats.shape == sub_feats.shape
     
     if self.use_local:
       assert local_batch is not None
@@ -139,7 +138,8 @@ class Vid2SeqCollator(nn.Module):
     return self.model(
       feats,
       tgt_embed,
-      {'input_ids': output_tokens, 'attention_mask': output_tokens != 0}
+      {'input_ids': output_tokens, 'attention_mask': output_tokens != 0},
+      sub_feats
     )
     
   @torch.no_grad()
@@ -148,7 +148,7 @@ class Vid2SeqCollator(nn.Module):
     feats,
     tgt_type,
     local_batch=None,
-    sub_feat=None,
+    sub_feats=None,
     use_nucleus_sampling=False,
     num_beams=4,
     max_length=256,
@@ -182,9 +182,8 @@ class Vid2SeqCollator(nn.Module):
     tgt_embed = tgt_embed.repeat(len(feats), 1, 1)
     
     if self.use_sub_feat:
-      assert sub_feat is not None
-      assert feats.shape == sub_feat.shape
-      feats = torch.cat((feats, sub_feat), 1)
+      assert sub_feats is not None
+      assert feats.shape == sub_feats.shape
     
     if self.use_local:
       assert local_batch is not None
@@ -194,6 +193,7 @@ class Vid2SeqCollator(nn.Module):
     return self.model.generate(
       feats,
       tgt_embed,
+      sub_feats,
       use_nucleus_sampling=use_nucleus_sampling,
       num_beams=num_beams,
       max_length=max_length,

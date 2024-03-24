@@ -44,16 +44,27 @@ class Vid2Seq(nn.Module):
     if self.t5_model.model_dim != 768:
       self.proj_v2t = nn.Linear(768, self.t5_model.model_dim)
       
-  def forward(self, feats, other_embeds, output_tokenized): # (feats, proj)
+  def forward(self, feats, other_embeds, output_tokenized, sub_feats=None):
     feats = self.visual_encoder(feats) # B T D
     if self.proj_v2t is not None:
       feats = self.proj_v2t(feats)
     feats_atts = torch.ones(feats.size()[:-1], dtype=torch.long).to(feats.device) # ignore the feature dim 
-    encoded = BaseModelOutput(
-      last_hidden_state=torch.cat([feats, other_embeds], dim=1) # type: ignore
-    )
-    other_embeds_atts = torch.ones(other_embeds.size()[:-1], dtype=torch.long).to(feats.device)
-    encoder_atts = torch.cat([feats_atts, other_embeds_atts], dim=1)
+    
+    all_encoded = [feats]
+    all_atts = [feats_atts]
+    
+    if sub_feats is not None:
+      sub_feats = self.visual_encoder(sub_feats) 
+      if self.proj_v2t is not None:
+        sub_feats = self.proj_v2t(sub_feats)
+      all_encoded.append(sub_feats)
+      all_atts.append(torch.ones(sub_feats.size()[:-1], dtype=torch.long).to(feats.device))
+
+    all_encoded.append(other_embeds)
+    all_atts.append(torch.ones(other_embeds.size()[:-1], dtype=torch.long).to(feats.device))
+    
+    encoded = BaseModelOutput(last_hidden_state=torch.cat(all_encoded, dim=1)) # type: ignore
+    encoder_atts = torch.cat(all_atts, dim=1)
     
     targets = output_tokenized['input_ids'].masked_fill(
       output_tokenized['input_ids'] == self.t5_tokenizer.pad_token_id, -100
@@ -76,6 +87,7 @@ class Vid2Seq(nn.Module):
     self,
     feats,
     other_embeds,
+    sub_feats=None,
     use_nucleus_sampling=False,
     num_beams=4,
     max_length=256,
@@ -104,11 +116,22 @@ class Vid2Seq(nn.Module):
     if self.proj_v2t is not None:
       feats = self.proj_v2t(feats)
     feats_atts = torch.ones(feats.size()[:-1], dtype=torch.long).to(feats.device)
-    encoded = BaseModelOutput(
-      last_hidden_state=torch.cat([feats, other_embeds], dim=1) # type: ignore
-    )
-    other_embeds_atts = torch.ones(other_embeds.size()[:-1], dtype=torch.long).to(feats.device)
-    encoder_atts = torch.cat([feats_atts, other_embeds_atts], dim=1)
+    
+    all_encoded = [feats]
+    all_atts = [feats_atts]
+    
+    if sub_feats is not None:
+      sub_feats = self.visual_encoder(sub_feats) 
+      if self.proj_v2t is not None:
+        sub_feats = self.proj_v2t(sub_feats)
+      all_encoded.append(sub_feats)
+      all_atts.append(torch.ones(sub_feats.size()[:-1], dtype=torch.long).to(feats.device))
+
+    all_encoded.append(other_embeds)
+    all_atts.append(torch.ones(other_embeds.size()[:-1], dtype=torch.long).to(feats.device))
+    
+    encoded = BaseModelOutput(last_hidden_state=torch.cat(all_encoded, dim=1)) # type: ignore
+    encoder_atts = torch.cat(all_atts, dim=1)
     
     assert type(self.t5_model) is T5ForConditionalGeneration
     outputs = self.t5_model.generate(
