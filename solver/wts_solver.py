@@ -52,6 +52,8 @@ class WTSSolver(BaseSolver):
         self.use_local = self.model.use_local
         self.use_sub_feat = self.model.use_sub_feat
         
+        self.pedestrian_factor = self.train_cfg.PEDESTRIAN_FACTOR
+        
         if cfg.LOG_TO_WANDB and not is_eval:
             self.init_wandb(
                 log_folder=local_dir,
@@ -133,7 +135,7 @@ class WTSSolver(BaseSolver):
             
             vehicle_loss = self.model(feat, vehicle_tokens, "vehicle", local_batch, sub_feat)
             pedestrian_loss = self.model(feat, pedestrian_tokens, "pedestrian", local_batch, sub_feat)
-            generative_loss = vehicle_loss + pedestrian_loss
+            generative_loss = vehicle_loss + self.pedestrian_factor * pedestrian_loss
             
             if self.denoising:
                 denoising_feat = batch["denoising_feat"].to(self.device)
@@ -146,7 +148,7 @@ class WTSSolver(BaseSolver):
                 denoise_pedestrian_loss = self.model(
                     denoising_feat, denoise_pedestrian_tokens, "pedestrian", local_batch, sub_feat
                 )
-                denoising_loss = denoise_vehicle_loss + denoise_pedestrian_loss
+                denoising_loss = denoise_vehicle_loss + self.pedestrian_factor * denoise_pedestrian_loss
                 loss = generative_loss + denoising_loss
             else:
                 denoising_loss = None
@@ -185,7 +187,7 @@ class WTSSolver(BaseSolver):
             feats=feat,
             tgt_type=tgt_type,
             local_batch=local_batch,
-            sub_feat=sub_feat,
+            sub_feats=sub_feat,
             use_nucleus_sampling=tbu_cfg.NUM_BEAMS == 0,
             num_beams=tbu_cfg.NUM_BEAMS,
             max_length=max_output_tokens,
