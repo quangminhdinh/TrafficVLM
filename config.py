@@ -126,6 +126,7 @@ _C.SOLVER.TEST.TEMPERATURE = 1.
 
 _C.ENSEMBLE = CN()
 _C.ENSEMBLE.EXPERIMENT_LIST = []
+_C.ENSEMBLE.ROOT_EXP = None
 
 
 def get_cfg_defaults():

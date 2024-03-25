@@ -1,21 +1,19 @@
 SOLVER:
   TRAIN:
     MAX_EPOCH: 45
-    BATCH_SIZE: 4
+    BATCH_SIZE: 1
     SAVE_INTERVAL: 5
   VAL:
     VAL_INTERVAL: 5
+  LOAD_FROM_EPOCH: 30
+  LOG_TO_WANDB: False
   
 MODEL:
   USE_LOCAL: True
   ENCODE_LOCAL_TEMPORAL: True
 
 ENSEMBLE:
-  EXPERIMENT_LIST: [
-    "high_fps_all",
-    "local_temp_all",
-    "local_temp_all_e30"
-  ]
+  ROOT_EXP: "local_temp_all"
 
 DATA:
   FPS: 3

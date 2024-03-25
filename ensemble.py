@@ -32,6 +32,20 @@ def load_exp(exp_name):
   return cfg
 
 
+def batch_tokens(tokens, bs):
+  max_len = max(x.shape[-1] for x in tokens)
+  for i in range(bs):
+    if tokens[i].shape[-1] < max_len:
+      tokens[i] = torch.cat(
+        [tokens[i], 
+         torch.zeros(
+           *tokens[i].shape[:-1], 
+           max_len - tokens[i].shape[-1]
+         ).to(tokens[i].device).long()], -1
+      )
+  return torch.stack(tokens)
+
+
 def ensemble_single(model_list, tokenizer, feat, tgt_type, max_output_tokens, local_batch=None, sub_feat=None):
   all_sequences = []
   scores = []
@@ -56,9 +70,15 @@ def ensemble_single(model_list, tokenizer, feat, tgt_type, max_output_tokens, lo
     all_sequences.append(outputs.sequences)
     score = model.compute_reconstructed_scores(outputs, tbu_cfg.LENGTH_PENALTY)
     scores.append(score)
-  max_idx = np.argmax(scores)
+  scores = torch.stack(scores)
+  all_sequences = batch_tokens(all_sequences, len(all_sequences))
+  max_idx = torch.argmax(scores, dim=0)
+  final_sequences = []
+  for idx, max_idx in enumerate(max_idx):
+    final_sequences.append(all_sequences[max_idx][idx])
+  final_sequences = torch.stack(final_sequences)
   return tokenizer.batch_decode(
-    all_sequences[max_idx], skip_special_tokens=True
+    final_sequences, skip_special_tokens=True
   )
    
 
@@ -177,11 +197,14 @@ def main(args, cfg):
       is_eval=True
     )
     
-    exp_dir = Path(model_cfg.GLOB.EXP_PARENT_DIR) / exp
+    ckpt_parent = model_cfg.ENSEMBLE.ROOT_EXP if model_cfg.ENSEMBLE.ROOT_EXP is not None else exp
+    exp_dir = Path(model_cfg.GLOB.EXP_PARENT_DIR) / ckpt_parent
     load_path = exp_dir / f'epoch_{model_cfg.SOLVER.LOAD_FROM_EPOCH}.th'
     assert load_path.exists()
     state = torch.load(load_path, 'cpu')
     model.load_state_dict(state['model'])
+    
+    print(f"Pretrained loaded for experiment {exp} at epoch {model_cfg.SOLVER.LOAD_FROM_EPOCH}!")
     
     model.to(device)
     model.eval()
