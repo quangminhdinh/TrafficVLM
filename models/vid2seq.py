@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from transformers.modeling_outputs import BaseModelOutput
+import numpy as np
 
 from .modeling_t5 import T5ForConditionalGeneration
 from .vit import VisionTransformer
@@ -83,6 +84,14 @@ class Vid2Seq(nn.Module):
     return loss
   
   @torch.no_grad()
+  def compute_reconstructed_scores(self, outputs, length_penalty):
+    transition_scores = self.t5_model.compute_transition_scores(
+      outputs.sequences, outputs.scores, outputs.beam_indices, normalize_logits=False
+    )
+    output_length = np.sum(transition_scores.numpy() < 0, axis=1)
+    return transition_scores.sum(axis=1) / (output_length**length_penalty)
+  
+  @torch.no_grad()
   def generate(
     self,
     feats,
@@ -97,6 +106,7 @@ class Vid2Seq(nn.Module):
     length_penalty=1.0,
     num_captions=1,
     temperature=1,
+    output_scores=False,
   ):
     """
     Args:
@@ -146,7 +156,12 @@ class Vid2Seq(nn.Module):
       repetition_penalty=repetition_penalty,
       length_penalty=length_penalty,
       num_return_sequences=num_captions,
+      output_scores=output_scores,
+      return_dict_in_generate=output_scores,
     )
+    
+    if output_scores:
+      return outputs
     
     output_text = self.t5_tokenizer.batch_decode(
       outputs, skip_special_tokens=True

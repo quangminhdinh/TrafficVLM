@@ -143,6 +143,10 @@ class Vid2SeqCollator(nn.Module):
     )
     
   @torch.no_grad()
+  def compute_reconstructed_scores(self, outputs, length_penalty):
+    return self.model.compute_reconstructed_scores(outputs, length_penalty)
+    
+  @torch.no_grad()
   def generate(
     self,
     feats,
@@ -158,6 +162,7 @@ class Vid2SeqCollator(nn.Module):
     length_penalty=1.0,
     num_captions=1,
     temperature=1,
+    output_scores=False,
   ):
     """
     Args:
@@ -203,4 +208,5 @@ class Vid2SeqCollator(nn.Module):
       length_penalty=length_penalty,
       num_captions=num_captions,
       temperature=temperature,
+      output_scores=output_scores,
     )

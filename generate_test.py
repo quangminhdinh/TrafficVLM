@@ -48,7 +48,7 @@ def main(args, cfg):
                            batch_size=args.batch,
                            sampler=test_sampler,
                            collate_fn=wts_test_collate_fn,
-                           num_workers=os.cpu_count() - 4) # type: ignore
+                           num_workers=32) # type: ignore
   
   model = Vid2SeqCollator(
     cfg.MODEL, tokenizer, cfg.DATA.NUM_BINS, cfg.DATA.MAX_FEATS, cfg.DATA.SUB_FEATURE is not None, is_eval=True
