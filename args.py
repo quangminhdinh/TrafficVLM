@@ -32,7 +32,7 @@ def get_test_args_parser():
   
   parser.add_argument(
     "-b", "--batch",
-    type=int, default=7, #15,
+    type=int, default=8, #15,
     help="batch size to be used for testing",
   )
   

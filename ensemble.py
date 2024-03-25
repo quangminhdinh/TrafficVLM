@@ -69,6 +69,9 @@ def ensemble_single(model_list, tokenizer, feat, tgt_type, max_output_tokens, lo
     )
     all_sequences.append(outputs.sequences)
     score = model.compute_reconstructed_scores(outputs, tbu_cfg.LENGTH_PENALTY)
+    if not model.use_local:
+      for s in range(len(score)):
+        score[s] = score[s] * 4 / 5 if score[s] < 0 else score[s] * 5 / 4
     scores.append(score)
   scores = torch.stack(scores)
   all_sequences = batch_tokens(all_sequences, len(all_sequences))

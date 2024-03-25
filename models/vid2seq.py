@@ -86,7 +86,7 @@ class Vid2Seq(nn.Module):
   @torch.no_grad()
   def compute_reconstructed_scores(self, outputs, length_penalty):
     transition_scores = self.t5_model.compute_transition_scores(
-      outputs.sequences, outputs.scores, outputs.beam_indices, normalize_logits=False
+      outputs.sequences, outputs.scores, outputs.beam_indices, normalize_logits=True
     )
     output_length = torch.sum(transition_scores < 0, 1)
     return transition_scores.sum(1) / (output_length**length_penalty)

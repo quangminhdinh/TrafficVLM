@@ -85,7 +85,7 @@ wts_test_external = {
   "captions": os.path.join(ANNOTATION_PATH, "wts_dataset_test/external/annotations/caption/test/public_challenge"),
   "bbox_pedestrian": os.path.join(ANNOTATION_PATH, f"wts_dataset_zip/WTS_DATASET_PUBLIC_TEST_BBOX/external/BDD_TC_5K/annotations/{SELECTED_BBOX}/test/public"),
   "bbox_vehicle": None,
-  "local_annotated": os.path.join(FEATURE_PATH, "local/external/BDD_PC_5K/new_bbox/test")
+  "local_annotated": os.path.join(FEATURE_PATH, "local/external/BDD_PC_5K/fix_test/test")
 }
 
 
