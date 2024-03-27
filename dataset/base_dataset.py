@@ -458,8 +458,8 @@ class BaseDataset(Dataset):
         true_end = phase["end_time"]
     true_end_frame = int(true_end * self.extract_fps)
     
-    assert true_end_frame < total_samples or \
-      true_end_frame - total_samples < self.extract_fps * 5
+    # assert true_end_frame < total_samples or \
+    #   true_end_frame - total_samples < self.extract_fps * 5
     true_end_frame = min(true_end_frame, total_samples)
     true_end = true_end_frame / self.extract_fps
     

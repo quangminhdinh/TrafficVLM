@@ -61,12 +61,12 @@ def main(args, cfg):
                             batch_size=cfg.SOLVER.TRAIN.BATCH_SIZE,
                             sampler=train_sampler,
                             collate_fn=wts_base_collate_fn,
-                            num_workers=4) # type: ignore
+                            num_workers=os.cpu_count()) # type: ignore
   val_loader = DataLoader(val_set,
                           batch_size=cfg.SOLVER.VAL.BATCH_SIZE or cfg.SOLVER.TRAIN.BATCH_SIZE,
                           sampler=val_sampler,
                           collate_fn=wts_base_collate_fn,
-                          num_workers=4) # type: ignore
+                          num_workers=os.cpu_count()) # type: ignore
   
   model = Vid2SeqCollator(
     cfg.MODEL, tokenizer, cfg.DATA.NUM_BINS, cfg.DATA.MAX_FEATS, cfg.DATA.SUB_FEATURE is not None
