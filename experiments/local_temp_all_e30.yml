@@ -1,6 +1,6 @@
 SOLVER:
   TRAIN:
-    MAX_EPOCH: 45
+    MAX_EPOCH: 30
     BATCH_SIZE: 1
     SAVE_INTERVAL: 5
   VAL:
