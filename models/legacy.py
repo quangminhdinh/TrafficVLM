@@ -173,7 +173,7 @@ from .modeling_t5 import T5ForConditionalGeneration
 from .mlp import Mlp
 
 
-class Vid2SeqCollator(nn.Module):
+class TrafficVLM(nn.Module):
   
   def __init__(self, cfg,
                tokenizer,

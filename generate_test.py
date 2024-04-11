@@ -15,7 +15,7 @@ from config import (
   get_sig
 )
 from utils import fix_seed
-from models import get_tokenizer, Vid2SeqCollator
+from models import get_tokenizer, TrafficVLM
 from dataset import (
   WTSTestDataset,
   wts_test_collate_fn,
@@ -50,7 +50,7 @@ def main(args, cfg):
                            collate_fn=wts_test_collate_fn,
                            num_workers=os.cpu_count()) # type: ignore
   
-  model = Vid2SeqCollator(
+  model = TrafficVLM(
     cfg.MODEL, tokenizer, cfg.DATA.NUM_BINS, cfg.DATA.MAX_FEATS, cfg.DATA.SUB_FEATURE is not None, is_eval=True
   )
   model.to(device)

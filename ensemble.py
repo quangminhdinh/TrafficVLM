@@ -14,7 +14,7 @@ from torch.utils.data import (
 from args import get_test_args_parser
 from config import get_cfg_defaults
 from utils import fix_seed
-from models import get_tokenizer, Vid2SeqCollator
+from models import get_tokenizer, TrafficVLM
 from dataset import (
   WTSTestDataset,
   wts_test_collate_fn,
@@ -191,7 +191,7 @@ def main(args, cfg):
   model_list = []
   for exp in exp_list:
     model_cfg = load_exp(exp)
-    model = Vid2SeqCollator(
+    model = TrafficVLM(
       model_cfg.MODEL, 
       tokenizer, 
       model_cfg.DATA.NUM_BINS, 

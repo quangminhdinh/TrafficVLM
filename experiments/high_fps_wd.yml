@@ -1,0 +1,19 @@
+SOLVER:
+  TRAIN:
+    MAX_EPOCH: 30
+    BATCH_SIZE: 1
+    SAVE_INTERVAL: 5
+  VAL:
+    VAL_INTERVAL: 5
+  # LOAD_FROM_EPOCH: 20
+
+DATA:
+  FPS: 3
+  MAX_OUTPUT_TOKENS: 1024
+  TRAIN_DATASETS: [
+    { "name": "wts_train_main", "ratio": -1 },
+    { "name": "wts_train_external", "ratio": -1 },
+    { "name": "wts_val_external", "ratio": -1 },
+    { "name": "wts_train_normal", "ratio": -1 },
+    { "name": "wts_val_normal", "ratio": -1 },
+  ]

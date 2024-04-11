@@ -1,0 +1,24 @@
+SOLVER:
+  TRAIN:
+    MAX_EPOCH: 30
+    BATCH_SIZE: 1
+    SAVE_INTERVAL: 5
+  VAL:
+    VAL_INTERVAL: 5
+  # LOAD_FROM_EPOCH: 25
+  
+MODEL:
+  USE_LOCAL: True
+  ENCODE_LOCAL_TEMPORAL: True
+
+DATA:
+  FPS: 3
+  MAX_OUTPUT_TOKENS: 1024
+  MAIN_FEATURE: "global"
+  TRAIN_DATASETS: [
+    { "name": "wts_train_main", "ratio": -1 },
+    { "name": "wts_train_external", "ratio": -1 },
+    { "name": "wts_val_external", "ratio": -1 },
+    { "name": "wts_train_normal", "ratio": -1 },
+    { "name": "wts_val_normal", "ratio": -1 },
+  ]

@@ -13,7 +13,7 @@ from .utils import (
 )
 
 
-class Vid2SeqCollator(nn.Module):
+class TrafficVLM(nn.Module):
   
   def __init__(self, cfg,
                tokenizer,
