@@ -6,7 +6,7 @@
 
 This repository contains the official code for the 3th place solution of the [8th AI City Challenge](https://www.aicitychallenge.org/) Track 2.
 
-#### [Paper](https://arxiv.org/abs/2404.09275) 
+#### \[[Paper](https://arxiv.org/abs/2404.09275)\]
 <!-- #### [Paper](https://arxiv.org/abs/2404.09275) | [Slide](bla) | [Poster](bla) | Primary contact: [Quang Minh Dinh](https://github.com/quangminhdinh)  -->
 
 ## Requirements
@@ -44,7 +44,7 @@ Each experiment has a configuration `.yml` file located in `experiments/`. You c
 You can download the experiment fine-tuned checkpoints via:
 
 | Experiment Name | For Ablation |                          Download                           |               Descriptions                 | 
-| :-------- | :-----------: | :----------------------------------------------------------: | :--------------------------------------:| 
+| :-------- | :-----------: | :----------------------------------------------------------: | :--------------------------------------| 
 | high_fps_wd | Yes | [Google drive link](https://drive.google.com/drive/folders/1KKxZfn0kDmBGMGg5AewjoJUdq6Kx_Fxh?usp=drive_link) | Sub-global |
 | local_wd | Yes | [Google drive link](https://drive.google.com/drive/folders/1s38hm-1_gwbCWhvw050ujf3GAZ_urrDF?usp=drive_link) | Sub-global + Local |
 | local_temp_wd | Yes | [Google drive link](https://drive.google.com/drive/folders/1RmKg3HNgwvdIQT0xARoaqa4Y5_HIQ5aZ?usp=drive_link) | Sub-global + Local + Phase Encoder |
@@ -100,6 +100,8 @@ where:
 
 After running the script, the result json can be found in `{LOG_DIR}/{EXP_NAME}/test_results/`.
 
+### AI City Challenge 2024 Results
+
 To replicate the results on Track 2 of the AI City Challenge 2024, first download all `high_fps_all` (epoch 25) and `local_temp_all` (epoch 20, 30) checkpoints from [the checkpoint section](#checkpoints).
 
 For the [internal WTS blind test set](https://github.com/woven-visionai/wts-dataset):
@@ -116,7 +118,7 @@ python ensemble.py ensemble
 
 Merge the two result jsons in `{LOG_DIR}/high_fps_all/test_results/` and `{LOG_DIR}/ensemble/` to get the final result json.
 
-### Citation
+## Citation
 
 If you found this work useful, consider giving this repository a star and citing our paper as followed:
 
