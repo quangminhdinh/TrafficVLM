@@ -28,3 +28,8 @@ DATA:
     { "name": "wts_train_normal", "ratio": -1 },
     { "name": "wts_val_normal", "ratio": -1 },
   ]
+  TEST_DATASETS: [
+    # { "name": "wts_test_main", "ratio": -1 },
+    # { "name": "wts_test_normal", "ratio": -1},
+    { "name": "wts_test_external", "ratio": -1},
+  ]
