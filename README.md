@@ -1,4 +1,4 @@
-# [CVPRW 2024] TrafficVLM: A Controllable Visual Language Model for Traffic Video Captioning
+# TrafficVLM: A Controllable Visual Language Model for Traffic Video Captioning
 
 ![arch](images/arch.jpg)
 
