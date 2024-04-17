@@ -78,7 +78,9 @@ To run an experiment:
 python train.py {EXP_NAME}
 ```
 
-where the experiment `EXP_NAME` has the corresponding configuration file at `experiments/{EXP_NAME}.yml`. Training hyper-parameters like device, batch size, validation interval and save interval can be modified in the configuration file.
+where the experiment `EXP_NAME` has the corresponding configuration file at `experiments/{EXP_NAME}.yml`. 
+
+Training hyper-parameters like device, batch size, validation interval and save interval can be modified in the configuration file.
 
 To replicate the results in Table 2 and Table 3 of the paper, use the corresponding experiment in the checkpoint table at [the previous section](#checkpoints) for the fine-tuning. All the checkpoints selected for evaluation are provided in the checkpoint table.
 
