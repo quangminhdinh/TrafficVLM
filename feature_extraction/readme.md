@@ -62,10 +62,10 @@ python wts_extractor.py --config_path ./config.yaml --is_external False  # speci
 
 ## General pipeline
 
-> Get the bounding boxes from the annotation file & video dimension
-> Loop through each frame of the video to crop out the frame
-> Resize the cropped frame to 224x224 in RGB colorspace
-> Feed that frame through CLIP-ViT-L/14 and append to the array that represents the encoded features of the whole video
+- Get the bounding boxes from the annotation file & video dimension
+- Loop through each frame of the video to crop out the frame
+- Resize the cropped frame to 224x224 in RGB colorspace
+- Feed that frame through CLIP-ViT-L/14 and append to the array that represents the encoded features of the whole video
 
 ## Example of levels of view
 
