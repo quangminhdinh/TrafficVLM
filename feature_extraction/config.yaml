@@ -1,0 +1,7 @@
+paths:
+  input_path:  "/home/data/wts_dataset_zip/videos/train" 
+  anno_path:   "/home/data/wts_dataset_zip/annotations_new/bbox_annotated/pedestrian/train" 
+  output_path: "/home/phong_features_test2/local/wts_dataset_zip/train" 
+  CLIP_PATH:   "/home/CLIP" 
+
+feature_type:  "local"
