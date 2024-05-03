@@ -1,7 +1,7 @@
 import os
 
 
-ROOT_PATH = "/home"
+ROOT_PATH = "/home/test/move"
 FEATURE_PATH = os.path.join(ROOT_PATH, "features")
 ANNOTATION_PATH = os.path.join(ROOT_PATH, "data")
 SELECTED_BBOX = "bbox_annotated"

@@ -37,7 +37,9 @@ Each experiment has a configuration `.yml` file located in `experiments/`. You c
 
 ### Data
 
-[TBU]
+Follow the steps outlined in [feature_extraction/README.md](https://github.com/quangminhdinh/TrafficVLM/blob/main/feature_extraction/README.md) to extract the CLIP features for training or download the extracted features [here](https://drive.google.com/file/d/1WInBUBNtclhC8YP5zaIiFoBlt6fnX3mT/view?usp=sharing).
+
+Change all the `sub_global`, `local_annotated`, and `global` paths for each dataset configuration in `dataset/config.py` to the generated feature paths. Change all `captions` paths to the annotation paths.
 
 ### Checkpoints
 
