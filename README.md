@@ -6,8 +6,8 @@
 
 This repository contains the official code for the 3th place solution of the [8th AI City Challenge](https://www.aicitychallenge.org/) Track 2.
 
-#### \[[Paper](https://arxiv.org/abs/2404.09275)\]
-<!-- #### [Paper](https://arxiv.org/abs/2404.09275) | [Slide](bla) | [Poster](bla) | Primary contact: [Quang Minh Dinh](https://github.com/quangminhdinh)  -->
+<!-- #### \[[Paper](https://arxiv.org/abs/2404.09275)\] -->
+#### [Paper](https://arxiv.org/abs/2404.09275) | [Slide](https://drive.google.com/file/d/1rQ6jfmmhsOCc5e5RPXTVc3cW2JSVEhYB/view?usp=sharing) | [Poster](https://drive.google.com/file/d/1Tk3keK4GY6iMjK9F38CG2w37hkQRwizC/view?usp=sharing) | Primary contact: [Quang Minh Dinh](https://github.com/quangminhdinh) 
 
 ## Requirements
 
