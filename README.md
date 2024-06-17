@@ -7,7 +7,7 @@
 This repository contains the official code for the 3th place solution of the [8th AI City Challenge](https://www.aicitychallenge.org/) Track 2.
 
 <!-- #### \[[Paper](https://arxiv.org/abs/2404.09275)\] -->
-#### [Paper](https://arxiv.org/abs/2404.09275) | [Slide](https://drive.google.com/file/d/1rQ6jfmmhsOCc5e5RPXTVc3cW2JSVEhYB/view?usp=sharing) | [Poster](https://drive.google.com/file/d/1Tk3keK4GY6iMjK9F38CG2w37hkQRwizC/view?usp=sharing) | Primary contact: [Quang Minh Dinh](https://github.com/quangminhdinh) 
+#### [Paper](https://openaccess.thecvf.com/content/CVPR2024W/AICity/html/Dinh_TrafficVLM_A_Controllable_Visual_Language_Model_for_Traffic_Video_Captioning_CVPRW_2024_paper.html) | [Slide](https://drive.google.com/file/d/1rQ6jfmmhsOCc5e5RPXTVc3cW2JSVEhYB/view?usp=sharing) | [Poster](https://drive.google.com/file/d/1Tk3keK4GY6iMjK9F38CG2w37hkQRwizC/view?usp=sharing) | Primary contact: [Quang Minh Dinh](https://github.com/quangminhdinh) 
 
 ## Requirements
 
@@ -127,10 +127,12 @@ Merge the two result jsons in `{LOG_DIR}/high_fps_all/test_results/` and `{LOG_D
 If you found this work useful, consider giving this repository a star and citing our paper as followed:
 
 ```bibtex
-@article{dinh2024trafficvlm,
-      title={TrafficVLM: A Controllable Visual Language Model for Traffic Video Captioning},
-      author={Quang Minh Dinh and Minh Khoi Ho and Anh Quan Dang and Hung Phong Tran},
-      journal={arXiv preprint arXiv:2404.09275},
-      year={2024}
+@InProceedings{Dinh_2024_CVPR,
+    author    = {Dinh, Quang Minh and Ho, Minh Khoi and Dang, Anh Quan and Tran, Hung Phong},
+    title     = {TrafficVLM: A Controllable Visual Language Model for Traffic Video Captioning},
+    booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Workshops},
+    month     = {June},
+    year      = {2024},
+    pages     = {7134-7143}
 }
 ```
